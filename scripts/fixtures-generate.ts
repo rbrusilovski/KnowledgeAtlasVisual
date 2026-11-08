@@ -6,7 +6,7 @@
  */
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { TAXONOMY, type NicheSeed, type SubnicheSeed } from "../prisma/seed/taxonomy";
+import { TAXONOMY, type NicheSeed, type SubnicheSeed } from "../src/server/taxonomy";
 
 const args = process.argv.slice(2);
 const arg = (name: string, def: number) => {

@@ -16,3 +16,9 @@ Format: decision — reason — alternative considered.
 - Incremental sync and stats refresh bypass the response cache — sync exists to see fresh data — relying on the 30 min first-page TTL.
 - bull-board runs inside the worker on 127.0.0.1:BULL_BOARD_PORT; the web app proxies `/api/admin/queues` for ADMIN users — no maintained Next.js adapter — mounting via Hono.
 - Custom job IDs use '-' separators (`ingest-UC…`, `sync-<id>-<hour>`) — BullMQ 6 rejects ':' in custom IDs — spec's `ingest:{id}` literal.
+- Web process embeds search queries in-process (lazy transformers.js singleton, warmed by instrumentation; 2 s timeout → keyword fallback) — simpler than a BullMQ RPC and no worker round-trip — worker RPC via waitUntilFinished.
+- `EMBEDDING_PROVIDER=hash` (feature hashing) added for offline/CI tests — keeps integration tests deterministic and fast; local MiniLM remains the default — downloading the model in CI.
+- Topic rows are created on first sighting (needed for canonical merging + counts) but only topics with ≥ 2 videos become graph nodes / list results — spec says *materialize a node* at ≥ 2 videos.
+- MiniLM cosine is rescaled (cos−0.12)/0.48 → 0..1 before the 0.55 weight — raw cosines for related text sit around 0.15–0.6 so unscaled scores never cleared the 0.35 threshold — per-channel max-normalization.
+- If a channel has any MANUAL niche, all automatic labels are removed on reclassification — 'manual always wins' — mixing manual + automatic labels.
+- Taxonomy lives in `src/server/taxonomy.ts` (seed + classification + fixture generator import it) — server code can't import from prisma/ via the @ alias — duplicating it.

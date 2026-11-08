@@ -3,10 +3,15 @@ import { QUEUES, enqueue } from "@/server/jobs";
 import * as ingestion from "@/server/services/ingestion";
 import * as transcripts from "@/server/services/transcripts";
 import { runCompliance } from "@/server/services/compliance";
+import { embedEntities, warmup } from "@/server/services/embeddings";
+import { extractTopics, applyAiTopics } from "@/server/services/topics";
+import { classifyChannel } from "@/server/services/classification";
+import { aiEnabled, extractVideo } from "@/server/services/ai";
 import { createWorker } from "./runtime";
 
 /** Each queue → processor. Kept thin: all logic lives in services. */
 export function startWorkers(): Worker[] {
+  warmup();
   return [
     createWorker(QUEUES.ingest, (job, ctl) =>
       ingestion.ingestChannel(
@@ -25,6 +30,18 @@ export function startWorkers(): Worker[] {
       return ingestion.scheduleDueSyncs();
     }),
     createWorker(QUEUES.compliance, () => runCompliance()),
+    createWorker(QUEUES.embed, (job) => embedEntities(job.data.entity, job.data.ids)),
+    createWorker(QUEUES.topics, async (job) => {
+      const r = await extractTopics(job.data.videoIds);
+      return r;
+    }),
+    createWorker(QUEUES.classify, (job) => classifyChannel(job.data.channelId)),
+    createWorker(QUEUES.ai, async (job) => {
+      if (!aiEnabled()) return { skipped: "ai disabled" };
+      const r = await extractVideo(job.data.targetId);
+      await applyAiTopics(job.data.targetId, r.output.topics);
+      return { cached: r.cached, topics: r.output.topics.length };
+    }),
   ];
 }
 
