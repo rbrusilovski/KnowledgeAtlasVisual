@@ -12,3 +12,7 @@ Format: decision — reason — alternative considered.
 - MSW dropped: MSW 3 did not intercept Node 24 fetch in Vitest (a request leaked to Google). LiveYouTubeClient takes an injectable fetch; tests use an in-memory transport — MSW.
 - Fixture mode meters quota exactly like live mode — UI quota meter and lane logic are exercised in the demo — skipping metering in fixture mode.
 - Fixture dataset is committed (~7 MB, deterministic seed 1337) and includes scheduled future uploads hidden until their publishedAt passes, so incremental sync finds new videos over time (`FIXTURE_NOW` overrides the clock) — generating at setup.
+- Job events for user-initiated jobs go only to `events:user:{id}`; background jobs go to `events:global` — avoids duplicate delivery on one SSE connection — publishing to both.
+- Incremental sync and stats refresh bypass the response cache — sync exists to see fresh data — relying on the 30 min first-page TTL.
+- bull-board runs inside the worker on 127.0.0.1:BULL_BOARD_PORT; the web app proxies `/api/admin/queues` for ADMIN users — no maintained Next.js adapter — mounting via Hono.
+- Custom job IDs use '-' separators (`ingest-UC…`, `sync-<id>-<hour>`) — BullMQ 6 rejects ':' in custom IDs — spec's `ingest:{id}` literal.
