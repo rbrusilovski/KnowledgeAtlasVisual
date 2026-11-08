@@ -1,0 +1,441 @@
+{
+  "note": "Fictional demo dataset for Atlas. Not real creators.",
+  "seed": 1337,
+  "generatedFor": "2026-11-08T00:00:00.000Z",
+  "channels": [
+    {
+      "id": "UCk7oFMNcSauuMHrLvMzCkbY",
+      "handle": "tidewelltutorial",
+      "title": "Tidewell Tutorial",
+      "subniche": "programming-tutorials",
+      "videos": 24
+    },
+    {
+      "id": "UCSkce29rCKQIIQVOKKuihmk",
+      "handle": "emberdev",
+      "title": "Ember Dev",
+      "subniche": "ai-ml",
+      "username": "emberdev2",
+      "videos": 37
+    },
+    {
+      "id": "UChmmv2I3pUZx19plfWAYo5V",
+      "handle": "laptoplabs",
+      "title": "Laptop Labs",
+      "subniche": "consumer-tech-reviews",
+      "videos": 53
+    },
+    {
+      "id": "UCDBfqirXsdarGuDHasmlKsd",
+      "handle": "hollowoakacademy",
+      "title": "Hollow Oak Academy",
+      "subniche": "cybersecurity",
+      "videos": 24
+    },
+    {
+      "id": "UCHNcs5Z2XY5zXFgHSspfFlU",
+      "handle": "granitedocker",
+      "title": "Granite Docker",
+      "subniche": "devops-cloud",
+      "username": "granitedocker8",
+      "videos": 37
+    },
+    {
+      "id": "UCGOOoW1S11PIxysngqE36KT",
+      "handle": "physicslectures",
+      "title": "Physics Lectures",
+      "subniche": "physics",
+      "username": "physicslectures5",
+      "videos": 54
+    },
+    {
+      "id": "UCXjB4McXrDRMUq8bOV0e3Oa",
+      "handle": "velvetmath",
+      "title": "Velvet Math",
+      "subniche": "math",
+      "videos": 38
+    },
+    {
+      "id": "UCXXy-pw0PV2fW8msDmp5ZX8",
+      "handle": "palemooncell",
+      "title": "Pale Moon Cell",
+      "subniche": "biology",
+      "videos": 42
+    },
+    {
+      "id": "UC0DH4_m7a-KVGeib-aytRXF",
+      "handle": "granitebyzantine",
+      "title": "Granite Byzantine",
+      "subniche": "history",
+      "username": "granitebyzantine1",
+      "videos": 28
+    },
+    {
+      "id": "UCRRnJ0pgCcn5T_ceJg2cPlf",
+      "handle": "granitenasa",
+      "title": "Granite Nasa",
+      "subniche": "space",
+      "videos": 42
+    },
+    {
+      "id": "UCzP_tHpyZIDeOzCbDceW25x",
+      "handle": "junipersaving",
+      "title": "Juniper Saving",
+      "subniche": "personal-finance",
+      "videos": 45
+    },
+    {
+      "id": "UC1aZ1TVBUBZ_ZI9uraQ7oDL",
+      "handle": "marrowportfolio",
+      "title": "Marrow Portfolio",
+      "subniche": "investing",
+      "username": "marrowportfolio7",
+      "videos": 28
+    },
+    {
+      "id": "UCedeWKi2IWmBWEP87UadPMV",
+      "handle": "embergrowth",
+      "title": "Ember Growth",
+      "subniche": "entrepreneurship",
+      "videos": 42
+    },
+    {
+      "id": "UCc3AjqF68XFkUnxp2VVbBs2",
+      "handle": "sundialledger",
+      "title": "Sundial Ledger",
+      "subniche": "real-estate",
+      "videos": 22
+    },
+    {
+      "id": "UCYvzTRwyb9o7C-lAd9371vI",
+      "handle": "slatewalkthrough",
+      "title": "Slate Walkthrough",
+      "subniche": "lets-plays",
+      "videos": 42
+    },
+    {
+      "id": "UCCmZL1AQCzGkLNznJ1DqYZ-",
+      "handle": "brightwatercontroller",
+      "title": "Brightwater Controller",
+      "subniche": "esports",
+      "videos": 30
+    },
+    {
+      "id": "UCI-ceHsYCDjM7TU1wl_zgI3",
+      "handle": "slatesavepoint",
+      "title": "Slate Save Point",
+      "subniche": "game-dev",
+      "username": "slatesavepoint1",
+      "videos": 55
+    },
+    {
+      "id": "UC7FlrrGqWbtSJy36sFJaevW",
+      "handle": "sundialgaming",
+      "title": "Sundial Gaming",
+      "subniche": "retro-gaming",
+      "videos": 41
+    },
+    {
+      "id": "UC6DqUjn81bd3J3OLflL9e0G",
+      "handle": "tidewellrouting",
+      "title": "Tidewell Routing",
+      "subniche": "speedrunning",
+      "videos": 53
+    },
+    {
+      "id": "UC17RC1TyF-b2B5TOb38LHct",
+      "handle": "marrowpowerlifting",
+      "title": "Marrow Powerlifting",
+      "subniche": "strength-training",
+      "videos": 34
+    },
+    {
+      "id": "UCAhJWbR32NSE9g1SibfqG6B",
+      "handle": "quietstrong",
+      "title": "Quiet Strong",
+      "subniche": "running",
+      "videos": 26
+    },
+    {
+      "id": "UCGgxF-Hlj-9rKqBLEMUWfnM",
+      "handle": "macrosmethod",
+      "title": "Macros Method",
+      "subniche": "nutrition",
+      "videos": 26
+    },
+    {
+      "id": "UCMtNADTpEBv1RboW7HCpav7",
+      "handle": "flexibilitystrong",
+      "title": "Flexibility Strong",
+      "subniche": "yoga-mobility",
+      "videos": 49
+    },
+    {
+      "id": "UCJzy3xWou626fgtT3qOs8zV",
+      "handle": "orbitsauce",
+      "title": "Orbit Sauce",
+      "subniche": "recipes",
+      "videos": 52
+    },
+    {
+      "id": "UC2fsANmKfBuxiwKSPNmC3bA",
+      "handle": "croissantbakery",
+      "title": "Croissant Bakery",
+      "subniche": "baking",
+      "videos": 39
+    },
+    {
+      "id": "UCLh8NlOI9fRyNwtdrn0e_2R",
+      "handle": "marrowpantry",
+      "title": "Marrow Pantry",
+      "subniche": "food-science",
+      "username": "marrowpantry5",
+      "videos": 58
+    },
+    {
+      "id": "UCi6J3H9z-_3KZwSyjRVSait",
+      "handle": "burgerpantry",
+      "title": "Burger Pantry",
+      "subniche": "restaurant-reviews",
+      "videos": 34
+    },
+    {
+      "id": "UCYVcdSwE0F_DCjMKEP59YLy",
+      "handle": "abletonframes",
+      "title": "Ableton Frames",
+      "subniche": "music-production",
+      "username": "abletonframes5",
+      "videos": 42
+    },
+    {
+      "id": "UCCjnK7T6XbigRd9rUTYU6lv",
+      "handle": "marrowillustration",
+      "title": "Marrow Illustration",
+      "subniche": "illustration",
+      "videos": 27
+    },
+    {
+      "id": "UCa3J8eKVv7X2upO5nNEAkJj",
+      "handle": "storytellingsessions",
+      "title": "Storytelling Sessions",
+      "subniche": "filmmaking",
+      "videos": 26
+    },
+    {
+      "id": "UCpjWllnbUW8fJIk1T4s0TMT",
+      "handle": "glasshouselightroom",
+      "title": "Glasshouse Lightroom",
+      "subniche": "photography",
+      "videos": 54
+    },
+    {
+      "id": "UC5Zwg4UR1B-W0mZ3CcoMGuI",
+      "handle": "slateworks",
+      "title": "Slate Works",
+      "subniche": "design",
+      "videos": 45
+    },
+    {
+      "id": "UCD5J-2XfyySX3LMCXs7CDiP",
+      "handle": "lumenculture",
+      "title": "Lumen Culture",
+      "subniche": "travel",
+      "videos": 44
+    },
+    {
+      "id": "UCk5tiRsD08Ps6wN4I0X84LY",
+      "handle": "saltmarshdays",
+      "title": "Saltmarsh Days",
+      "subniche": "productivity",
+      "videos": 60
+    },
+    {
+      "id": "UCsAqulD8XBMCORKdt_AKIJB",
+      "handle": "northbeamliving",
+      "title": "Northbeam Living",
+      "subniche": "minimalism",
+      "username": "northbeamliving1",
+      "videos": 50
+    },
+    {
+      "id": "UCHWTFSidzpIX4EdS5WSlS_b",
+      "handle": "wrenfieldhaul",
+      "title": "Wrenfield Haul",
+      "subniche": "fashion",
+      "videos": 22
+    },
+    {
+      "id": "UCgYYRDL5ZwGU9N-4rAhWZ5h",
+      "handle": "kestrelworkbench",
+      "title": "Kestrel Workbench",
+      "subniche": "woodworking",
+      "videos": 45
+    },
+    {
+      "id": "UCuBMv4ZAjGEHoQ7xJf_sZ-7",
+      "handle": "brightwaterhomestead",
+      "title": "Brightwater Homestead",
+      "subniche": "home-improvement",
+      "videos": 31
+    },
+    {
+      "id": "UCSLnN_7RiPULpqlIjWBFtuv",
+      "handle": "marrowshop",
+      "title": "Marrow Shop",
+      "subniche": "auto-repair",
+      "videos": 53
+    },
+    {
+      "id": "UCa2ZkDxF7fYNhNGIUqlC3ar",
+      "handle": "hollowoakarduino",
+      "title": "Hollow Oak Arduino",
+      "subniche": "electronics",
+      "videos": 20
+    },
+    {
+      "id": "UCbZNaenR6Zoo0vp77j_j3-f",
+      "handle": "wrenfieldpermaculture",
+      "title": "Wrenfield Permaculture",
+      "subniche": "gardening",
+      "videos": 29
+    },
+    {
+      "id": "UCCQFsrokOBEOrNtm7GSY2Pr",
+      "handle": "driftwoodcontroversy",
+      "title": "Driftwood Controversy",
+      "subniche": "commentary",
+      "videos": 32
+    },
+    {
+      "id": "UCL-Fqcf7gVz_dNks16kqq-s",
+      "handle": "fernwaysatire",
+      "title": "Fernway Satire",
+      "subniche": "comedy",
+      "videos": 21
+    },
+    {
+      "id": "UCttBONg29TY9_toRRmddQdP",
+      "handle": "directortheatre",
+      "title": "Director Theatre",
+      "subniche": "film-analysis",
+      "videos": 39
+    },
+    {
+      "id": "UCWak41Vdkf-AzHQk-FSVQO6",
+      "handle": "podcasttakes",
+      "title": "Podcast Takes",
+      "subniche": "podcasts",
+      "videos": 60
+    },
+    {
+      "id": "UCINjEI6ytuFoAFcz-wDKCAE",
+      "handle": "wrenfieldformation",
+      "title": "Wrenfield Formation",
+      "subniche": "football",
+      "videos": 45
+    },
+    {
+      "id": "UCRXDFshu7fhdYssSQnUjb6Q",
+      "handle": "junipertactics",
+      "title": "Juniper Tactics",
+      "subniche": "basketball",
+      "videos": 34
+    },
+    {
+      "id": "UCXcz9IGarz0DBibgyJv3qxo",
+      "handle": "tidewelloutdoors",
+      "title": "Tidewell Outdoors",
+      "subniche": "combat-sports",
+      "videos": 55
+    },
+    {
+      "id": "UCXZV00Y-U-EXRkIGYJZHDfO",
+      "handle": "kestrelcorner",
+      "title": "Kestrel Corner",
+      "subniche": "outdoor-adventure",
+      "videos": 35
+    },
+    {
+      "id": "UCa56CGAjFaJZOWRCfgrOXEN",
+      "handle": "wrenfieldlectures",
+      "title": "Wrenfield Lectures",
+      "subniche": "space",
+      "videos": 55
+    },
+    {
+      "id": "UCzcU43kPdndJLUcHdKvRNs3",
+      "handle": "telescopeexplained",
+      "title": "Telescope Explained",
+      "subniche": "space",
+      "videos": 37
+    },
+    {
+      "id": "UCIbZqYtKB-sRmIWblMrPPrA",
+      "handle": "junipercircuit",
+      "title": "Juniper Circuit",
+      "subniche": "electronics",
+      "username": "junipercircuit1",
+      "videos": 45
+    },
+    {
+      "id": "UCEuOyNcOAiA66JNfVjlPDS6",
+      "handle": "papercranegrid",
+      "title": "Paper Crane Grid",
+      "subniche": "design",
+      "username": "papercranegrid2",
+      "videos": 20
+    },
+    {
+      "id": "UCFaoSMmAenf0xNBotfHK7YK",
+      "handle": "hydrationstrong",
+      "title": "Hydration Strong",
+      "subniche": "nutrition",
+      "username": "hydrationstrong3",
+      "videos": 26
+    },
+    {
+      "id": "UCEv9Uw8JoAuEgksdRHcUts1",
+      "handle": "lumensavepoint",
+      "title": "Lumen Save Point",
+      "subniche": "speedrunning",
+      "videos": 51
+    },
+    {
+      "id": "UCtsLLsdDF4DZXjyHLN2pRtO",
+      "handle": "granitekitchen",
+      "title": "Granite Kitchen",
+      "subniche": "food-science",
+      "videos": 51
+    },
+    {
+      "id": "UCApl08eJyrFK-MG3A0IcHSX",
+      "handle": "pizzabakery",
+      "title": "Pizza Bakery",
+      "subniche": "restaurant-reviews",
+      "username": "pizzabakery1",
+      "videos": 36
+    },
+    {
+      "id": "UCrzQTPpvAfL48X6p0-nqVUH",
+      "handle": "pizzakitchen",
+      "title": "Pizza Kitchen",
+      "subniche": "restaurant-reviews",
+      "username": "pizzakitchen3",
+      "videos": 36
+    },
+    {
+      "id": "UCRtdoD0L5rpKN-Ts-bo0scO",
+      "handle": "saltmarshburger",
+      "title": "Saltmarsh Burger",
+      "subniche": "restaurant-reviews",
+      "videos": 48
+    },
+    {
+      "id": "UChR-NwWwtOj8uUCDll_LGpI",
+      "handle": "larkspurhostel",
+      "title": "Larkspur Hostel",
+      "subniche": "travel",
+      "videos": 56
+    }
+  ]
+}

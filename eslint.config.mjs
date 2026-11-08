@@ -1,6 +1,12 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
+import { readdirSync } from "node:fs";
+
+// Relative imports into a sibling service's internals (e.g. "../quota/time") are forbidden too.
+const SERVICES = readdirSync(new URL("./src/server/services", import.meta.url), { withFileTypes: true })
+  .filter((d) => d.isDirectory())
+  .map((d) => d.name);
 
 const serviceInternals = {
   group: ["@/server/services/*/*", "**/services/*/*"],
@@ -23,7 +29,11 @@ const eslintConfig = defineConfig([
     rules: {
       "no-restricted-imports": [
         "error",
-        { patterns: [{ group: ["@/server/services/*/*", "../*/*"], message: serviceInternals.message }] },
+        {
+          patterns: [
+            { group: ["@/server/services/*/*", ...SERVICES.map((n) => `../${n}`), ...SERVICES.map((n) => `../${n}/*`)], message: serviceInternals.message },
+          ],
+        },
       ],
     },
   },
