@@ -1,0 +1,5 @@
+src/generated
+fixtures
+pnpm-lock.yaml
+.next
+BUILD_SPEC.md

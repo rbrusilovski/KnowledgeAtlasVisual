@@ -1,0 +1,9 @@
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
+  prisma: true
+  "@prisma/engines": true
+  onnxruntime-node: true
+  esbuild: true
+  protobufjs: true
+  msgpackr-extract: true
