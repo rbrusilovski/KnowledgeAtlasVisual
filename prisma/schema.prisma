@@ -301,15 +301,15 @@ model Transcript {
 }
 
 model TranscriptChunk {
-  id           String                      @id @default(cuid())
-  transcriptId String
-  idx          Int
-  startSec     Float
-  endSec       Float
-  text         String
-  embedding    Unsupported("vector(384)")?
-  searchVector Unsupported("tsvector")?
-  transcript   Transcript                  @relation(fields: [transcriptId], references: [id], onDelete: Cascade)
+  id             String                      @id @default(cuid())
+  transcriptId   String
+  idx            Int
+  startSec       Float
+  endSec         Float
+  text           String
+  embedding      Unsupported("vector(384)")?
+  searchVector   Unsupported("tsvector")?
+  transcript     Transcript                  @relation(fields: [transcriptId], references: [id], onDelete: Cascade)
 
   @@unique([transcriptId, idx])
   @@index([searchVector], type: Gin, map: "TranscriptChunk_searchVector_idx")
@@ -355,15 +355,15 @@ model ChannelNiche {
 }
 
 model Topic {
-  id           String                      @id @default(cuid())
-  slug         String                      @unique
-  label        String
-  aliases      String[]
-  videoCount   Int                         @default(0)
-  channelCount Int                         @default(0)
-  embedding    Unsupported("vector(384)")?
-  searchVector Unsupported("tsvector")?
-  videos       VideoTopic[]
+  id             String                      @id @default(cuid())
+  slug           String                      @unique
+  label          String
+  aliases        String[]
+  videoCount     Int                         @default(0)
+  channelCount   Int                         @default(0)
+  embedding      Unsupported("vector(384)")?
+  searchVector   Unsupported("tsvector")?
+  videos         VideoTopic[]
 
   @@index([label(ops: raw("gin_trgm_ops"))], type: Gin, map: "Topic_label_trgm_idx")
   @@index([searchVector], type: Gin, map: "Topic_searchVector_idx")
@@ -657,6 +657,28 @@ model AiExtraction {
   @@unique([targetType, targetId, contentHash])
 }
 
+/// Bearer credential an AI agent (e.g. Claude via the MCP adapter) uses to call `/api/agent/tools/*` on a user's
+/// behalf. Only a SHA-256 hash is stored. Agents may inspect and propose; they can never approve (services/expansion).
+model AgentToken {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String
+  /// sha256(token) hex — the token itself is shown once at creation.
+  tokenHash  String    @unique
+  /// First characters of the token for display ("atl_ab12…").
+  prefix     String
+  /// "read" (inspection tools), "propose" (estimate + create proposals), "private-transcripts" (include the owner's
+  /// private transcripts in search results).
+  scopes     String[]
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
 // ─────────────────────────────── Better Auth ──────────────────────────────
 
 model User {
@@ -678,6 +700,7 @@ model User {
   transcripts       Transcript[]
   proposalsCreated  ExpansionProposal[] @relation("ProposalCreator")
   proposalsApproved ExpansionProposal[] @relation("ProposalApprover")
+  agentTokens       AgentToken[]
 
   @@map("user")
 }
