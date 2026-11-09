@@ -18,7 +18,7 @@
     "yt:probe": "tsx scripts/yt-probe.ts",
     "graph:rebuild": "tsx scripts/graph-rebuild.ts",
     "embeddings:reindex": "tsx scripts/embeddings-reindex.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "lint": "eslint --max-warnings=0 .",
     "format": "prettier --write .",
     "test": "vitest run --project unit",
