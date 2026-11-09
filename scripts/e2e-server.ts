@@ -2,7 +2,7 @@
  * Isolated end-to-end environment (used by Playwright's webServer):
  *   DB atlas_e2e · Redis prefix atlas-e2e · port 3100 · build dir .next-e2e · hash embeddings (offline, fast)
  * Resets the e2e DB, seeds taxonomy + a subset of fixture channels through the real pipeline, then runs the
- * worker and `next dev`. Ctrl-C / SIGTERM stops everything.
+ * worker and a production build served by `next start`. Ctrl-C / SIGTERM stops everything.
  */
 import { spawn, execSync, type ChildProcess } from "node:child_process";
 import { config } from "dotenv";
@@ -54,4 +54,7 @@ run("pnpm -s prisma migrate deploy");
 run("pnpm -s tsx scripts/db-reset.ts --yes --no-seed");
 run(`pnpm -s tsx prisma/seed/index.ts --channels ${process.env.E2E_CHANNELS ?? "14"}`);
 children.push(spawn("pnpm", ["-s", "tsx", "src/worker/index.ts"], { env: { ...env, ATLAS_PROCESS: "worker" }, stdio: "inherit" }));
-children.push(spawn("pnpm", ["-s", "next", "dev", "-p", PORT], { env, stdio: "inherit" }));
+// Production build + `next start` (not `next dev`): dev servers rewrite next-env.d.ts on start, so an e2e dev server
+// and a developer's `pnpm dev` would keep triggering each other's reloads. It's also closer to production.
+if (!process.env.E2E_SKIP_BUILD) run("pnpm -s next build");
+children.push(spawn("pnpm", ["-s", "next", "start", "-p", PORT], { env: { ...env, NODE_ENV: "production" }, stdio: "inherit" }));

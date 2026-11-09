@@ -26,7 +26,9 @@ export async function openAtlas(page: Page, query = "") {
   }, undefined, { timeout: 60_000 });
 }
 
+/** Wait for the initial ForceAtlas2 run to start (if it's going to) and then finish, so positions are stable. */
 export async function waitForLayoutIdle(page: Page) {
+  await page.waitForFunction(() => (window as unknown as AtlasWindow).__atlas!.atlas.isLayoutRunning(), undefined, { timeout: 5_000 }).catch(() => undefined);
   await page.waitForFunction(() => !(window as unknown as AtlasWindow).__atlas!.atlas.isLayoutRunning(), undefined, { timeout: 30_000 });
   await page.waitForTimeout(400);
 }
@@ -49,4 +51,14 @@ export async function nodeAttrs(page: Page, nodeId: string) {
 
 export async function hasNode(page: Page, nodeId: string) {
   return page.evaluate((id) => (window as unknown as AtlasWindow).__atlas!.graph.hasNode(id), nodeId);
+}
+
+/** Zoom the camera onto a node so dense layouts can't put a neighbour or label under the cursor. */
+export async function zoomToNode(page: Page, nodeId: string) {
+  type Cam = { isAnimating(): boolean; getState(): { x: number; y: number; ratio: number } };
+  type W = { __atlas: { atlas: { flyTo(id: string, r: number): boolean; sigma: { getCamera(): Cam } } } };
+  await page.evaluate((id) => (window as unknown as W).__atlas.atlas.flyTo(id, 0.08), nodeId);
+  // Wait for the camera animation to finish and the view to settle (slow first renders on cold CI runners).
+  await page.waitForFunction(() => !(window as unknown as W).__atlas.atlas.sigma.getCamera().isAnimating(), undefined, { timeout: 15_000 });
+  await page.waitForTimeout(300);
 }

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { signUp, openAtlas, waitForLayoutIdle, graphOrder, nodePoint, nodeAttrs, hasNode, INGESTED, NOT_INGESTED } from "./helpers";
+import { signUp, openAtlas, waitForLayoutIdle, graphOrder, nodePoint, nodeAttrs, hasNode, zoomToNode, INGESTED, NOT_INGESTED } from "./helpers";
 
 test.describe("atlas", () => {
   test("sign up → atlas renders nodes (list view + counts)", async ({ page }) => {
@@ -37,6 +37,7 @@ test.describe("atlas", () => {
     await waitForLayoutIdle(page);
     const id = `channel:${INGESTED[0]!.id}`;
     const before = await graphOrder(page);
+    await zoomToNode(page, id);
     const p = await nodePoint(page, id);
     await page.mouse.dblclick(p.x, p.y);
     await expect.poll(() => graphOrder(page), { timeout: 20_000 }).toBeGreaterThan(before);
@@ -47,6 +48,7 @@ test.describe("atlas", () => {
     await openAtlas(page);
     await waitForLayoutIdle(page);
     const id = `channel:${INGESTED[1]!.id}`;
+    await zoomToNode(page, id);
     const p = await nodePoint(page, id);
     await page.mouse.move(p.x, p.y);
     await page.mouse.down();
