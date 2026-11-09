@@ -38,6 +38,17 @@ interface DiscoveryResult {
   cached: boolean;
 }
 
+/** ISO 3166-1 alpha-2 regions and ISO 639-1 languages passed to search.list (regionCode / relevanceLanguage). */
+const REGIONS: [string, string][] = [
+  ["US", "United States"], ["GB", "United Kingdom"], ["CA", "Canada"], ["AU", "Australia"], ["IN", "India"], ["DE", "Germany"],
+  ["FR", "France"], ["ES", "Spain"], ["IT", "Italy"], ["NL", "Netherlands"], ["SE", "Sweden"], ["BR", "Brazil"], ["MX", "Mexico"],
+  ["JP", "Japan"], ["KR", "South Korea"], ["ID", "Indonesia"], ["PH", "Philippines"], ["NG", "Nigeria"], ["ZA", "South Africa"],
+];
+const LANGUAGES: [string, string][] = [
+  ["en", "English"], ["es", "Spanish"], ["pt", "Portuguese"], ["fr", "French"], ["de", "German"], ["it", "Italian"], ["nl", "Dutch"],
+  ["hi", "Hindi"], ["ja", "Japanese"], ["ko", "Korean"], ["zh-Hans", "Chinese (Simplified)"], ["ar", "Arabic"], ["ru", "Russian"], ["id", "Indonesian"],
+];
+
 export function DiscoverPage() {
   const sp = useSearchParams();
   const me = useMe();
@@ -52,6 +63,8 @@ export function DiscoverPage() {
   const [adding, setAdding] = useState<Map<string, "queued" | "done">>(new Map());
   const [confirmNiche, setConfirmNiche] = useState<{ units: number; queries: string[] } | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [region, setRegion] = useState(sp.get("region") ?? "");
+  const [language, setLanguage] = useState(sp.get("lang") ?? "");
 
   const search = quota.data?.buckets.find((b) => b.bucket === "search");
   const user = quota.data?.user;
@@ -72,8 +85,8 @@ export function DiscoverPage() {
   const run = useMutation({
     mutationFn: async (opts: { kind: "query" } | { kind: "niche"; confirm?: boolean }) =>
       opts.kind === "query"
-        ? api.post<DiscoveryResult>("/api/discover/channels", { query: q.trim(), nicheId: niche?.id, maxResults: 25 })
-        : api.post<DiscoveryResult>(`/api/discover/niche/${nicheSlug}`, { confirm: opts.confirm, maxResults: 15 }),
+        ? api.post<DiscoveryResult>("/api/discover/channels", { query: q.trim(), nicheId: niche?.id, maxResults: 25, regionCode: region || undefined, relevanceLanguage: language || undefined })
+        : api.post<DiscoveryResult>(`/api/discover/niche/${nicheSlug}`, { confirm: opts.confirm, maxResults: 15, regionCode: region || undefined }),
     onSuccess: (r) => {
       setResult(r);
       setSelected(new Set());
@@ -144,6 +157,22 @@ export function DiscoverPage() {
                 </option>
               ))}
             </optgroup>
+          ))}
+        </select>
+        <select value={region} onChange={(e) => setRegion(e.target.value)} className="h-9 rounded-control border border-border bg-bg-3/60 px-2 text-sm text-text-2" aria-label="Region" data-testid="discover-region">
+          <option value="">Any region</option>
+          {REGIONS.map(([code, label]) => (
+            <option key={code} value={code}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <select value={language} onChange={(e) => setLanguage(e.target.value)} className="h-9 rounded-control border border-border bg-bg-3/60 px-2 text-sm text-text-2" aria-label="Language" data-testid="discover-language">
+          <option value="">Any language</option>
+          {LANGUAGES.map(([code, label]) => (
+            <option key={code} value={code}>
+              {label}
+            </option>
           ))}
         </select>
         <Button type="submit" variant="primary" className="h-9" disabled={q.trim().length < 2 || run.isPending} data-testid="discover-submit">

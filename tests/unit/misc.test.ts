@@ -41,3 +41,10 @@ describe("ISO 8601 durations", () => {
   ])("%s", (iso, sec) => expect(parseIsoDuration(iso)).toBe(sec));
   it("returns undefined for junk", () => expect(parseIsoDuration("1:23")).toBeUndefined());
 });
+
+describe("local embedding runtime", () => {
+  it("@huggingface/transformers and its ONNX runtime resolve (guards against phantom-dependency breakage)", async () => {
+    const tf = await import("@huggingface/transformers");
+    expect(typeof tf.pipeline).toBe("function");
+  }, 60_000);
+});

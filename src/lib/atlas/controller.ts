@@ -63,7 +63,14 @@ class AtlasController {
     if (token !== this.mountToken || !container.isConnected || this.sigma) return;
     this.labelFont = getComputedStyle(document.body).fontFamily || this.labelFont;
     const sigma = new SigmaCtor<AtlasNodeAttrs, AtlasEdgeAttrs>(atlasGraph, container, {
-      primitives: { nodes: { layers: [layerFill(), layerImage({ imageAttribute: "image", drawingMode: "image" })] } },
+      primitives: {
+        nodes: {
+          layers: [
+            layerFill(),
+            layerImage({ imageAttribute: "image", drawingMode: "image" }),
+          ],
+        },
+      },
       settings: {
         enableNodeDrag: true,
         allowInvalidContainer: true,

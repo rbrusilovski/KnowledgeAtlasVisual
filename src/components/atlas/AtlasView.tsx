@@ -205,6 +205,16 @@ export function AtlasView() {
     useUi.getState().set("graphStats", { ...useUi.getState().graphStats, nodes: atlasGraph.order, edges: atlasGraph.size, visible: visible.size });
   }, [ui.colorBy, ui.labels, ui.sizeBy, visible, ui.selected, filters.kinds, filters.minWeight, reducedMotion]);
 
+  // Default-layout preference: with no explicit ?mode, "local" opens the last selected node's neighborhood.
+  const appliedDefault = useRef(false);
+  useEffect(() => {
+    if (appliedDefault.current || !me.data) return;
+    appliedDefault.current = true;
+    if (new URLSearchParams(window.location.search).has("mode")) return;
+    const last = useUi.getState().lastFocus;
+    if (me.data.defaultLayout === "local" && last) void setParams({ mode: "local", focus: last, depth: 2 });
+  }, [me.data, setParams]);
+
   // Search-to-focus from ⌘K or ?q deep link: fly to node, loading its neighborhood if absent.
   useEffect(() => {
     const onFocus = async (e: Event) => {
@@ -278,6 +288,7 @@ function LoadingOverlay() {
 
 function EmptyAtlas() {
   const { data: quota } = useQuota();
+  const [loading, setLoading] = useState(false);
   return (
     <div className="absolute inset-0 flex items-center justify-center">
       <div className="overlay max-w-md rounded-panel">
@@ -286,8 +297,22 @@ function EmptyAtlas() {
             <Link href="/discover">Discover channels</Link>
           </Button>
           {quota?.mode === "fixture" ? (
-            <Button variant="secondary" onClick={() => toast.info("Run `pnpm db:seed` to ingest the fictional demo dataset through the real pipeline.")}>
-              <Database /> Load demo dataset
+            <Button
+              variant="secondary"
+              disabled={loading}
+              onClick={async () => {
+                setLoading(true);
+                try {
+                  const r = await api.post<{ queued: number }>("/api/demo/load");
+                  toast.success(r.queued ? `Ingesting ${r.queued} fictional demo channels — they'll appear here live` : "The demo dataset is already loaded");
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Could not load the demo dataset");
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            >
+              <Database /> {loading ? "Queuing…" : "Load demo dataset"}
             </Button>
           ) : null}
         </EmptyState>
@@ -708,7 +733,7 @@ function StatusBar() {
   const stats = useUi((s) => s.graphStats);
   const { jobs } = useLive();
   const active = jobs.filter((j) => j.state === "active");
-  const latest = useQuery({ queryKey: ["latest-upload"], queryFn: () => api.get<{ latestVideoAt: string | null }[]>("/api/channels", { sort: "recent", limit: 1 }).then((r) => r[0]?.latestVideoAt ?? null), refetchInterval: 60_000 });
+  const lastSync = useQuery({ queryKey: ["last-sync"], queryFn: () => api.get<{ lastSyncedAt: string | null }[]>("/api/channels", { sort: "synced", limit: 1 }).then((r) => r[0]?.lastSyncedAt ?? null), refetchInterval: 60_000 });
   return (
     <footer className="flex h-7 shrink-0 items-center gap-4 border-t border-border bg-bg-1 px-3 text-xs text-text-3" aria-label="Status">
       <div className="flex min-w-0 items-center gap-3" aria-live="polite">
@@ -731,7 +756,7 @@ function StatusBar() {
         ))}
       </div>
       <div className="ml-auto flex items-center gap-4">
-        {latest.data ? <span>Latest upload {fmtRelative(latest.data)}</span> : null}
+        {lastSync.data ? <span>Last sync {fmtRelative(lastSync.data)}</span> : null}
         <span className="num" data-testid="graph-counts">
           {stats.visible.toLocaleString()} / {stats.nodes.toLocaleString()} nodes · {stats.edges.toLocaleString()} edges
         </span>

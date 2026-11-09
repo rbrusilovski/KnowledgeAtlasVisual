@@ -33,6 +33,8 @@ interface UiState {
   paletteOpen: boolean;
   hidden: string[];
   graphStats: { nodes: number; edges: number; visible: number; version: string | null; truncated: boolean };
+  /** Last single-node selection, for the "local graph" default-layout preference. */
+  lastFocus: string | null;
   setWorkspace(id: string): void;
   toggleSidebar(v?: boolean): void;
   toggleInspector(v?: boolean): void;
@@ -59,13 +61,14 @@ export const useUi = create<UiState>()(
       paletteOpen: false,
       hidden: [],
       graphStats: { nodes: 0, edges: 0, visible: 0, version: null, truncated: false },
+      lastFocus: null,
       setWorkspace: (id) => set({ workspaceId: id }),
       toggleSidebar: (v) => set((s) => ({ sidebarOpen: v ?? !s.sidebarOpen })),
       toggleInspector: (v) => set((s) => ({ inspectorOpen: v ?? !s.inspectorOpen })),
       set: (k, v) => set({ [k]: v } as Partial<UiState>),
       select: (ids, mode = "replace") =>
         set((s) => {
-          if (mode === "replace") return { selected: ids, inspectorOpen: ids.length ? true : s.inspectorOpen };
+          if (mode === "replace") return { selected: ids, inspectorOpen: ids.length ? true : s.inspectorOpen, lastFocus: ids.length === 1 ? ids[0]! : s.lastFocus };
           const cur = new Set(s.selected);
           for (const id of ids) {
             if (mode === "toggle" && cur.has(id)) cur.delete(id);
@@ -80,7 +83,7 @@ export const useUi = create<UiState>()(
       name: "atlas-ui",
       // Rehydrated after mount (Providers) so the first client render matches the server HTML.
       skipHydration: true,
-      partialize: (s) => ({ workspaceId: s.workspaceId, sidebarOpen: s.sidebarOpen, inspectorOpen: s.inspectorOpen, colorBy: s.colorBy, labels: s.labels, sizeBy: s.sizeBy }),
+      partialize: (s) => ({ lastFocus: s.lastFocus, workspaceId: s.workspaceId, sidebarOpen: s.sidebarOpen, inspectorOpen: s.inspectorOpen, colorBy: s.colorBy, labels: s.labels, sizeBy: s.sizeBy }),
     },
   ),
 );

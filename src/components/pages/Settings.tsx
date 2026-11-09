@@ -82,7 +82,7 @@ export function SettingsPage({ youtubeOAuth }: { youtubeOAuth: boolean }) {
           Default atlas layout
           <select value={u.defaultLayout} onChange={(e) => void patch({ defaultLayout: e.target.value })} className="h-8 rounded-control border border-border bg-bg-3/60 px-2 text-sm" aria-label="Default atlas layout">
             <option value="global">Global graph</option>
-            <option value="local">Local graph (last selection)</option>
+            <option value="local">Local graph around your last selection</option>
           </select>
         </label>
       </Section>

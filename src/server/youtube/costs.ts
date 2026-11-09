@@ -62,4 +62,8 @@ export const CACHE_TTL = {
   videoStats: 6 * 3600,
   channelSections: 6 * 3600,
   resolution: 30 * 24 * 3600,
+  /** Extra stale-while-revalidate windows for reads that power the UI. */
+  channelSwr: 3600,
+  uploadsFirstPageSwr: 15 * 60,
+  videoStatsSwr: 3600,
 } as const;

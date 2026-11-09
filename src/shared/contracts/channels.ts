@@ -15,7 +15,7 @@ export const ChannelListQuery = z.object({
   minSubscribers: z.coerce.number().int().nonnegative().optional(),
   maxSubscribers: z.coerce.number().int().nonnegative().optional(),
   q: z.string().max(200).optional(),
-  sort: z.enum(["subscribers", "recent", "title", "videos"]).default("subscribers"),
+  sort: z.enum(["subscribers", "recent", "title", "videos", "synced"]).default("subscribers"),
   limit: Limit,
   cursor: Cursor,
 });
@@ -51,4 +51,5 @@ export interface ChannelSummary {
   viewCount: number | null;
   niches: { id: string; slug: string; name: string; confidence: number; method: string; lowConfidence: boolean }[];
   latestVideoAt: string | null;
+  lastSyncedAt: string | null;
 }

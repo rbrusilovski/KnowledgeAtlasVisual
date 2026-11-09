@@ -135,7 +135,8 @@ export class FixtureYouTubeClient implements RawYouTubeClient {
     return loadFixtures().sections.get(channelId) ?? [];
   }
 
-  async searchChannels(p: { q: string; maxResults?: number }): Promise<SearchChannelHit[]> {
+  /** regionCode biases (not filters) results toward that country, like the real API; all fixture content is English. */
+  async searchChannels(p: { q: string; maxResults?: number; regionCode?: string }): Promise<SearchChannelHit[]> {
     const s = loadFixtures();
     const q = new Set(tokenize(p.q));
     if (!q.size) return [];
@@ -149,6 +150,7 @@ export class FixtureYouTubeClient implements RawYouTubeClient {
           if (title.includes(t)) score += 3;
           score += body.filter((b) => b === t).length;
         }
+        if (score > 0 && p.regionCode && c.snippet?.country === p.regionCode) score += 2;
         return { c, score };
       })
       .filter((x) => x.score > 0)

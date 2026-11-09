@@ -206,3 +206,33 @@ describe("search (fixture mode)", () => {
     expect(Array.isArray(typo)).toBe(true);
   });
 });
+
+describe("suggested subniches", () => {
+  it("clusters low-confidence channels, accepts a suggestion and reclassifies members", async () => {
+    const { suggestSubniches, acceptSubnicheSuggestion, dismissSuggestion } = await import("@/server/services/classification");
+    // Make every channel a weak fit so they become candidates.
+    await db.channelNiche.updateMany({ data: { confidence: 0.2, lowConfidence: true } });
+    const suggestions = await suggestSubniches({ minClusterSize: 2, minSimilarity: -1 });
+    expect(suggestions.length).toBeGreaterThan(0);
+    const s = suggestions[0]!;
+    expect(s.channels.length).toBeGreaterThanOrEqual(2);
+    expect(s.id).toMatch(/^[a-f0-9]{12}$/);
+
+    const parent = await db.niche.findFirstOrThrow({ where: { depth: 0 } });
+    const niche = await acceptSubnicheSuggestion({ channelIds: s.channels.map((c) => c.id), name: "Test Cluster Niche", parentSlug: parent.slug, keywords: s.keywords });
+    const created = await db.niche.findUniqueOrThrow({ where: { slug: niche.slug }, include: { channels: true } });
+    expect(created.depth).toBe(1);
+    expect(created.parentId).toBe(parent.id);
+    expect(created.channels.length).toBe(s.channels.length);
+    const rows = await db.$queryRaw<{ has: boolean }[]>`SELECT centroid IS NOT NULL AS has FROM "Niche" WHERE id = ${created.id}`;
+    expect(rows[0]?.has).toBe(true);
+    await drain();
+    expect(await db.graphNode.findUnique({ where: { id: `subniche:${niche.slug}` } })).not.toBeNull();
+
+    // Accepted / dismissed suggestions don't come back.
+    const again = await suggestSubniches({ minClusterSize: 2, minSimilarity: -1 });
+    expect(again.find((x) => x.id === s.id)).toBeUndefined();
+    for (const x of again) await dismissSuggestion(x.id);
+    expect(await suggestSubniches({ minClusterSize: 2, minSimilarity: -1 })).toEqual([]);
+  });
+});

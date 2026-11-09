@@ -93,7 +93,8 @@ export const youtube = {
       const out = [];
       for (let i = 0; i < ids.length; i += MAX_IDS_PER_CALL) {
         const batch = ids.slice(i, i + MAX_IDS_PER_CALL).sort();
-        out.push(...(await maybeCached("channels", { ids: batch }, CACHE_TTL.channel, () => metered("channels.list", () => rawClient().channelsList({ ids: batch })))));
+        // Stale-while-revalidate: UI reads get the cached copy instantly while a refresh runs in the background.
+        out.push(...(await maybeCached("channels", { ids: batch }, CACHE_TTL.channel, () => metered("channels.list", () => rawClient().channelsList({ ids: batch })), CACHE_TTL.channelSwr)));
       }
       return out;
     }
@@ -113,7 +114,7 @@ export const youtube = {
   async getPlaylistItems(playlistId: string, pageToken?: string) {
     if (!/^[A-Za-z0-9_-]{10,64}$/.test(playlistId)) throw new AppError("VALIDATION_ERROR", "Invalid playlist id");
     const ttl = pageToken ? CACHE_TTL.uploadsPage : CACHE_TTL.uploadsFirstPage;
-    return maybeCached("playlistItems", { playlistId, pageToken }, ttl, () => metered("playlistItems.list", () => rawClient().playlistItemsList(playlistId, pageToken)));
+    return maybeCached("playlistItems", { playlistId, pageToken }, ttl, () => metered("playlistItems.list", () => rawClient().playlistItemsList(playlistId, pageToken)), pageToken ? undefined : CACHE_TTL.uploadsFirstPageSwr);
   },
 
   async getVideos(ids: string[]) {
@@ -121,7 +122,7 @@ export const youtube = {
     const out = [];
     for (let i = 0; i < valid.length; i += MAX_IDS_PER_CALL) {
       const batch = valid.slice(i, i + MAX_IDS_PER_CALL).sort();
-      out.push(...(await maybeCached("videos", { ids: batch }, CACHE_TTL.videoStats, () => metered("videos.list", () => rawClient().videosList(batch)))));
+      out.push(...(await maybeCached("videos", { ids: batch }, CACHE_TTL.videoStats, () => metered("videos.list", () => rawClient().videosList(batch)), CACHE_TTL.videoStatsSwr)));
     }
     return out;
   },

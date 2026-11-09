@@ -14,8 +14,12 @@ async function timed(fn: () => Promise<string | void>): Promise<Check> {
   }
 }
 
-/** Extra checks registered by services (queues, embeddings) to avoid import cycles. */
-const extraChecks = new Map<string, () => Promise<string | void>>();
+/**
+ * Extra checks registered by instrumentation (queues, embeddings). Kept on globalThis: Next bundles the
+ * instrumentation hook separately from route handlers, so a module-level Map would not be shared.
+ */
+const g = globalThis as unknown as { __atlasHealthChecks?: Map<string, () => Promise<string | void>> };
+const extraChecks = (g.__atlasHealthChecks ??= new Map());
 export function registerHealthCheck(name: string, fn: () => Promise<string | void>) {
   extraChecks.set(name, fn);
 }

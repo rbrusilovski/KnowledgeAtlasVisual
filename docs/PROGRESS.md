@@ -31,6 +31,10 @@ Source of truth: `BUILD_SPEC.md`. Phases follow §16.
   check (no secret values; only Better Auth's isomorphic env-getter references the name), hydration fixes,
   graph-bench 60 FPS at 5k/19k and 10k/38k (headless Chromium).
 
+- [x] Spec-gap pass: default-layout + reduced-motion preferences wired; discover region/language; suggested
+  subniches (service, admin UI, accept/dismiss, integration test); "Load demo dataset" action; SWR on UI reads;
+  status bar last sync; bull-board proxy verified; Docker prod build fixed (placeholders at build time).
+
 ## Definition of Done
 - [x] Fresh clone → README steps → working fixture-mode app with the demo dataset.
 - [x] `YOUTUBE_MODE=live` + key uses the live client with no code changes (live client covered by unit tests; not run

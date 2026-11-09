@@ -261,3 +261,21 @@ export async function seedTaxonomy(): Promise<string[]> {
   return needEmbedding.filter((id) => !have.has(id));
 }
 
+
+// ── Suggested subniches ────────────────────────────────────────────────────
+
+export { suggestSubniches, dismissSuggestion, suggestionId, type SubnicheSuggestion, type SuggestOptions } from "./suggestions";
+import { acceptSuggestion, type AcceptInput } from "./suggestions";
+
+export async function acceptSubnicheSuggestion(input: AcceptInput) {
+  const niche = await acceptSuggestion(
+    input,
+    (id) => classifyChannel(id),
+    async (channelId, nicheId) => (await scoreChannel(channelId))?.ranked.find((r) => r.sub.id === nicheId)?.confidence ?? 0,
+    () => {
+      profileCache = null;
+    },
+  );
+  await recomputeNicheCounts();
+  return niche;
+}

@@ -37,6 +37,7 @@ export const channelSummarySelect = {
   videoCount: true,
   viewCount: true,
   latestVideoAt: true,
+  lastSyncedAt: true,
   niches: {
     orderBy: { confidence: "desc" },
     select: { confidence: true, method: true, lowConfidence: true, niche: { select: { id: true, slug: true, name: true } } },
@@ -57,6 +58,7 @@ export function toSummary(c: SummaryRow): ChannelSummary {
     videoCount: c.videoCount,
     viewCount: num(c.viewCount),
     latestVideoAt: c.latestVideoAt?.toISOString() ?? null,
+    lastSyncedAt: c.lastSyncedAt?.toISOString() ?? null,
     niches: c.niches.map((n) => ({ ...n.niche, confidence: n.confidence, method: n.method, lowConfidence: n.lowConfidence })),
   };
 }
@@ -76,7 +78,9 @@ export async function listChannels(q: z.infer<typeof ChannelListQuery>) {
   const orderBy: Prisma.ChannelOrderByWithRelationInput[] =
     q.sort === "recent"
       ? [{ latestVideoAt: { sort: "desc", nulls: "last" } }]
-      : q.sort === "title"
+      : q.sort === "synced"
+        ? [{ lastSyncedAt: { sort: "desc", nulls: "last" } }]
+        : q.sort === "title"
         ? [{ title: "asc" }]
         : q.sort === "videos"
           ? [{ videoCount: { sort: "desc", nulls: "last" } }]

@@ -7,8 +7,19 @@ import { Toaster } from "sonner";
 import { useEffect, useState, type ReactNode } from "react";
 import { useUi } from "@/lib/atlas/store";
 import { ApiError } from "@/lib/api";
+import { useMe } from "@/lib/hooks";
 
-export function Providers({ children, reducedMotion }: { children: ReactNode; reducedMotion?: boolean }) {
+/** Applies the signed-in user's reduced-motion preference (in addition to the OS-level prefers-reduced-motion). */
+function MotionPreference({ children }: { children: ReactNode }) {
+  const me = useMe();
+  const reduced = Boolean(me.data?.reducedMotion);
+  useEffect(() => {
+    document.documentElement.classList.toggle("reduce-motion", reduced);
+  }, [reduced]);
+  return <MotionConfig reducedMotion={reduced ? "always" : "user"}>{children}</MotionConfig>;
+}
+
+export function Providers({ children }: { children: ReactNode }) {
   const [client] = useState(
     () =>
       new QueryClient({
@@ -27,14 +38,14 @@ export function Providers({ children, reducedMotion }: { children: ReactNode; re
   return (
     <QueryClientProvider client={client}>
       <NuqsAdapter>
-        <MotionConfig reducedMotion={reducedMotion ? "always" : "user"}>
+        <MotionPreference>
           {children}
           <Toaster
             theme="dark"
             position="bottom-right"
             toastOptions={{ className: "!bg-bg-2 !border-border !text-text-1 !text-sm" }}
           />
-        </MotionConfig>
+        </MotionPreference>
       </NuqsAdapter>
     </QueryClientProvider>
   );
