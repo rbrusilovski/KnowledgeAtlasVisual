@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
@@ -93,6 +93,20 @@ export function AtlasView() {
     staleTime: 30_000,
   });
 
+  // Track pointer for drag-to-collection.
+  const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    const f = (e: MouseEvent) => (lastPointerRef.current = { x: e.clientX, y: e.clientY });
+    window.addEventListener("mousemove", f);
+    return () => window.removeEventListener("mousemove", f);
+  }, []);
+  const add = useAddToCollection();
+  const cols = useCollections(workspace?.id);
+  const dropToCollection = useEffectEvent((collectionId: string, ids: string[]) => {
+    const name = cols.data?.find((c) => c.id === collectionId)?.name ?? "collection";
+    add.mutate({ collectionId, workspaceId: workspace?.id, nodeIds: ids }, { onSuccess: (r) => toast.success(r.added ? `Saved to ${name}` : `Already in ${name}`) });
+  });
+
   // Mount sigma once.
   useEffect(() => {
     const el = containerRef.current;
@@ -105,10 +119,10 @@ export function AtlasView() {
         onContextMenu: (m) => useUi.getState().set("contextMenu", m),
         onDragEnd: (nodeId, x, y) => {
           saveLayout(nodeId, x, y, true);
-          const pointer = lastPointer.current;
+          const pointer = lastPointerRef.current;
           const target = pointer && document.elementFromPoint(pointer.x, pointer.y)?.closest("[data-collection-drop]");
           const collectionId = target?.getAttribute("data-collection-drop");
-          if (collectionId) dropToCollection.current(collectionId, [nodeId]);
+          if (collectionId) dropToCollection(collectionId, [nodeId]);
         },
         onCamera: () => setCameraTick((t) => t + 1),
         onLayout: (running) => useUi.getState().set("layoutRunning", running),
@@ -125,23 +139,6 @@ export function AtlasView() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Track pointer for drag-to-collection.
-  const lastPointer = useRef<{ x: number; y: number } | null>(null);
-  useEffect(() => {
-    const f = (e: MouseEvent) => (lastPointer.current = { x: e.clientX, y: e.clientY });
-    window.addEventListener("mousemove", f);
-    return () => window.removeEventListener("mousemove", f);
-  }, []);
-  const add = useAddToCollection();
-  const cols = useCollections(workspace?.id);
-  const dropToCollection = useRef<(collectionId: string, ids: string[]) => void>(() => {});
-  useEffect(() => {
-    dropToCollection.current = (collectionId, ids) => {
-      const name = cols.data?.find((c) => c.id === collectionId)?.name ?? "collection";
-      add.mutate({ collectionId, workspaceId: workspace?.id, nodeIds: ids }, { onSuccess: (r) => toast.success(r.added ? `Saved to ${name}` : `Already in ${name}`) });
-    };
-  }, [cols.data, add, workspace?.id]);
 
   // Merge server subgraph (+ pinned layout) into the graphology instance.
   const loadedKey = useRef<string>("");
