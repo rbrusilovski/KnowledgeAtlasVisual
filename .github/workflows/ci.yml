@@ -52,8 +52,11 @@ jobs:
       - name: Build
         run: pnpm build
       - name: No secrets in the client bundle
+        # Secret VALUES must never appear; server-only key names must not either. (Better Auth's isomorphic env
+        # getter mentions the name BETTER_AUTH_SECRET but resolves to undefined in the browser.)
         run: |
-          ! grep -rE "YOUTUBE_API_KEY|ANTHROPIC_API_KEY|BETTER_AUTH_SECRET|ENCRYPTION_KEY|GOOGLE_CLIENT_SECRET|GITHUB_CLIENT_SECRET|${BETTER_AUTH_SECRET}" .next/static
+          ! grep -rlF -e "$BETTER_AUTH_SECRET" -e "$ENCRYPTION_KEY" -e "$DEMO_USER_PASSWORD" .next/static
+          ! grep -rlE "YOUTUBE_API_KEY|ANTHROPIC_API_KEY|ENCRYPTION_KEY|GOOGLE_CLIENT_SECRET|GITHUB_CLIENT_SECRET|DATABASE_URL|REDIS_URL" .next/static
       - run: pnpm exec playwright install --with-deps chromium
       - name: E2E
         run: pnpm e2e

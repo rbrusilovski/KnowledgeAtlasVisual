@@ -31,3 +31,9 @@ Format: decision — reason — alternative considered.
 - OpenAPI is generated from the shared Zod contracts with Zod 4's native `z.toJSONSchema` — no maintained Zod→OpenAPI library needed for Zod 4 — @asteasolutions/zod-to-openapi.
 - Account deletion also removes the user's uploaded transcripts and discovery history — they are personal contributions — keeping them anonymized.
 - Semantic search hits below a similarity floor (0.28 for local MiniLM, 0.05 for the hash provider) are dropped before RRF — semantic lists always return k items and otherwise inject unrelated niches into hybrid results — no floor.
+- Client-bundle secret check greps secret *values* plus server-only key names; the name `BETTER_AUTH_SECRET` is allowed because Better Auth's isomorphic env getter references it (returns undefined in the browser) — failing the build on a library string.
+- E2E runs in an isolated environment (`scripts/e2e-server.ts`: DB `atlas_e2e`, Redis prefix `atlas-e2e`, port 3100, `NEXT_DIST_DIR=.next-e2e`, hash embeddings, 14 seeded channels) so it can run next to `pnpm dev` — sharing the dev DB/server.
+- `window.__atlas` exposes the controller + graph for Playwright (node positions on a WebGL canvas aren't in the DOM) — pixel-guessing in tests.
+- Session-gated UI branches on React Query `isPending`, not `isLoading` — on the server and first client render the query is pending-but-idle, so `isLoading` was false and caused hydration mismatches.
+- Zustand `persist` uses `skipHydration` + `rehydrate()` after mount — synchronous localStorage hydration made the first client render differ from the server.
+- lucide-react no longer ships brand icons; the YouTube connect button uses a generic link icon — bundling a YouTube logo.
