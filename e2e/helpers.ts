@@ -12,7 +12,7 @@ export async function signUp(page: Page) {
   const base = new URL(page.context().pages()[0]?.url() || "http://localhost:3100").origin;
   const origin = base.startsWith("http") && !base.includes("about:") ? base : "http://localhost:3100";
   const res = await page.request.post("/api/auth/sign-up/email", { data: { email, password: "e2e-password-123", name: "E2E" }, headers: { origin } });
-  expect(res.ok()).toBeTruthy();
+  expect(res.ok(), `sign-up failed: ${res.status()} ${await res.text()}`).toBeTruthy();
   return email;
 }
 

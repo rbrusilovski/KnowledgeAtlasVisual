@@ -54,6 +54,8 @@ const serverSchema = z
     RATE_LIMIT_AI_PER_DAY: int(50),
     BULL_BOARD_PORT: int(3101),
     WORKER_SCHEDULERS: bool(true),
+    /** Better Auth's built-in limiter (sign-in/sign-up brute-force protection). On by default in production. */
+    AUTH_RATE_LIMIT: z.enum(["on", "off", "auto"]).default("auto"),
   })
   .superRefine((v, ctx) => {
     if (v.YOUTUBE_MODE === "live" && !v.YOUTUBE_API_KEY) {

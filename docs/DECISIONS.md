@@ -56,3 +56,4 @@ Format: decision — reason — alternative considered.
 - **Production image installs `openssl`** — the Prisma CLI (`migrate deploy` on container start) needs it on `node:24-bookworm-slim`.
 - **E2E serves a production build (`next build` + `next start`)**, not `next dev` — two dev servers (developer's `pnpm dev` + e2e) each rewrite `next-env.d.ts` on start and kept triggering each other's reload loops; a prod build is also closer to production. `E2E_SKIP_BUILD=1` reuses the last e2e build.
 - **Canvas e2e specs zoom onto their target node and wait for the initial layout + camera to settle** before pointer actions — on dense or cold layouts the cursor otherwise hit a neighbour (CI showed this as a flaky expand test).
+- **`AUTH_RATE_LIMIT`** (auto/on/off) controls Better Auth's built-in limiter (auto = on in production); the isolated e2e environment sets it off because the suite signs up many users from one IP within seconds — alternative: spacing out e2e signups.

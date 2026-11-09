@@ -29,7 +29,8 @@ export const auth = betterAuth({
   },
   // No cookie cache: revoking a session or deleting an account must take effect immediately.
   session: { cookieCache: { enabled: false } },
-  rateLimit: { enabled: env.NODE_ENV === "production", window: 60, max: 30 },
+  // "auto" = on in production. The isolated e2e environment turns it off: tests sign up many users from one IP.
+  rateLimit: { enabled: env.AUTH_RATE_LIMIT === "on" || (env.AUTH_RATE_LIMIT === "auto" && env.NODE_ENV === "production"), window: 60, max: 30 },
   databaseHooks: {
     user: {
       create: {

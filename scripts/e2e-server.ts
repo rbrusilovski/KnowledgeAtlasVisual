@@ -28,6 +28,7 @@ const env: NodeJS.ProcessEnv = {
   RATE_LIMIT_CHANNEL_ADDS_PER_HOUR: "500",
   DISCOVERY_SEARCHES_PER_USER_PER_DAY: "100",
   LOG_LEVEL: "warn",
+  AUTH_RATE_LIMIT: "off",
 };
 
 async function ensureDb() {
