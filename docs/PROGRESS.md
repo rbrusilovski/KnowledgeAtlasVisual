@@ -22,9 +22,13 @@ Source of truth: `BUILD_SPEC.md`. Phases follow §16.
 - [x] Phase 4 — Graph: all edge kinds, provenance-exact incremental builds, Louvain, global/local traversal (Redis-cached by version), neighbors, delta, related creators, path.
 - [x] Phase 5 — Search: keyword/fuzzy/semantic/hybrid (RRF), channel-scoped facets, transcript deep links. suggest ≈ 3 ms warm.
 - [x] Phase 6 — Personal layer: workspaces/collections/items/views/layouts, export (JSON/CSV), account deletion, rate limits, security headers, IDOR tests.
-- [ ] Phase 7 — Atlas UI
-- [ ] Phase 8 — Pages
-- [ ] Phase 9 — Polish, README, CI
+- [x] Phase 7 — Atlas UI (verified manually in browser: render, hover-highlight, select→inspector, double-click expand, ⌘K search-to-focus, context menu, drag-pin persisted across reload). Playwright specs NOT yet written.
+- [ ] Phase 8 — Pages. DONE: landing, signin, discover, channel, video, collections list/detail.
+  TODO: /search page, /settings, /admin (API exists: /api/admin/overview + bull-board proxy), /privacy + /terms templates,
+  /dev/graph-bench (10k synthetic nodes + FPS). Not yet browser-checked: discover, channel, video, collections pages.
+- [ ] Phase 9 — Polish, README, CI. TODO: Playwright e2e specs (needs `pnpm exec playwright install chromium`),
+  README (≤5-command quickstart, live-mode key, quota cheat-sheet, transcript limits), GitHub Actions CI, `pnpm build`
+  + grep build output for secrets, a11y/contrast pass, scripts `db:reset` and `embeddings:reindex` (package.json references them; files missing).
 
 Tests: 92 unit, 30 integration passing.
 
@@ -33,4 +37,6 @@ Tests: 92 unit, 30 integration passing.
 - Docker via OrbStack.
 
 ## Known issues
-- None yet.
+- `scripts/db-reset.ts` and `scripts/embeddings-reindex.ts` are referenced in package.json but not written yet.
+- Demo-data SIMILAR/CO_TOPIC edges are sparse at spec thresholds (see DECISIONS.md).
+- Seed must run with the worker code available in-process (it does); first run downloads the MiniLM model (~23 MB).
