@@ -178,7 +178,7 @@ export async function acceptSuggestion(input: AcceptInput, classify: (channelId:
     const linked = await db.channelNiche.findUnique({ where: { channelId_nicheId: { channelId: c.id, nicheId: niche.id } } });
     if (!linked) {
       const confidence = await scoreFor(c.id, niche.id);
-      await db.channelNiche.create({ data: { channelId: c.id, nicheId: niche.id, confidence, method: "EMBEDDING", lowConfidence: confidence < env.CLASSIFY_MIN_CONFIDENCE, rationale: "Member of an accepted suggested subniche" } });
+      await db.channelNiche.create({ data: { channelId: c.id, nicheId: niche.id, confidence, method: "EMBEDDING", lowConfidence: confidence < env.CLASSIFY_MIN_CONFIDENCE, rationale: "Member of an accepted suggested subniche", classifier: "suggestion-accept@1", evidence: { origin: "atlas-inferred", classifier: "suggestion-accept@1", confidence, acceptedSuggestionNiche: niche.slug, classifiedAt: new Date().toISOString() } } });
     }
   }
   await enqueue.graph([`subniche:${niche.slug}`, `niche:${parent.slug}`, ...channels.map((c) => `channel:${c.youtubeId}`)]);

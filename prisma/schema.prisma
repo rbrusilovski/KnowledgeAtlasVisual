@@ -341,6 +341,11 @@ model ChannelNiche {
   method        ClassMethod
   rationale     String?
   lowConfidence Boolean     @default(false)
+  /// Classifier version that produced the label (e.g. "hybrid@1", "ai:<model>", "manual").
+  classifier    String?
+  /// Provenance: score components, matched keywords/topic categories, source fields + video IDs, taxonomy and
+  /// embedding-model versions. Atlas-inferred (never official YouTube metadata).
+  evidence      Json?
   createdAt     DateTime    @default(now())
   channel       Channel     @relation(fields: [channelId], references: [id], onDelete: Cascade)
   niche         Niche       @relation(fields: [nicheId], references: [id], onDelete: Cascade)

@@ -107,7 +107,7 @@ export const TFIDF_EXTRACTOR = "tfidf@1";
  * supporting transcript chunks with timestamps, and the score. Atlas-inferred — never presented as YouTube data.
  */
 function topicEvidence(
-  v: { youtubeId: string; title: string; tags: string[]; description: string; transcripts: { id: string; chunks: { id: string; text: string; startSec: number }[] }[] },
+  v: { youtubeId: string; title: string; tags: string[]; description: string; transcripts: { id: string; chunks: { id: string; text: string; startSec: number; endSec: number }[] }[] },
   phrase: string,
   score: number,
 ): Record<string, unknown> {
@@ -120,9 +120,10 @@ function topicEvidence(
     origin: "atlas-inferred",
     extractor: TFIDF_EXTRACTOR,
     score: +score.toFixed(4),
+    confidence: +Math.min(1, score).toFixed(4),
     fields,
     sourceVideo: v.youtubeId,
-    ...(chunks.length ? { transcriptId: tr!.id, chunks: chunks.map((c) => ({ chunkId: c.id, startSec: c.startSec, url: `https://www.youtube.com/watch?v=${v.youtubeId}&t=${Math.floor(c.startSec)}s` })) } : {}),
+    ...(chunks.length ? { transcriptId: tr!.id, chunks: chunks.map((c) => ({ chunkId: c.id, startSec: c.startSec, endSec: c.endSec, url: `https://www.youtube.com/watch?v=${v.youtubeId}&t=${Math.floor(c.startSec)}s` })) } : {}),
     extractedAt: new Date().toISOString(),
   };
 }
@@ -140,7 +141,7 @@ export async function extractTopics(videoIds: string[]): Promise<ExtractResult> 
       description: true,
       channel: { select: { youtubeId: true } },
       // Only shared-corpus transcripts feed shared topics; private transcripts never leak into the corpus.
-      transcripts: { where: corpusWhere(), orderBy: { fetchedAt: "desc" }, take: 1, select: { id: true, chunks: { orderBy: { idx: "asc" }, take: 8, select: { id: true, text: true, startSec: true } } } },
+      transcripts: { where: corpusWhere(), orderBy: { fetchedAt: "desc" }, take: 1, select: { id: true, chunks: { orderBy: { idx: "asc" }, take: 8, select: { id: true, text: true, startSec: true, endSec: true } } } },
     },
   });
   const perVideo = new Map<string, Map<string, number>>();
