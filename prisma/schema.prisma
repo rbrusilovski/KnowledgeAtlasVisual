@@ -183,6 +183,8 @@ model Channel {
   featuredChannelIds    String[]
   isAvailable           Boolean                     @default(true)
   embeddingHash         String?
+  /// Vector space of `embedding` ("<provider>@<dim>"); rows from another model are re-embedded by embeddings:reindex.
+  embeddingModel        String?
   embedding             Unsupported("vector(384)")?
   searchVector          Unsupported("tsvector")?
   videos                Video[]
@@ -257,6 +259,7 @@ model Video {
   transcriptStatus     TranscriptStatus            @default(NOT_CHECKED)
   topicsAt             DateTime?
   embeddingHash        String?
+  embeddingModel       String?
   embedding            Unsupported("vector(384)")?
   searchVector         Unsupported("tsvector")?
   channel              Channel                     @relation(fields: [channelId], references: [id], onDelete: Cascade)
@@ -308,6 +311,7 @@ model TranscriptChunk {
   endSec         Float
   text           String
   embedding      Unsupported("vector(384)")?
+  embeddingModel String?
   searchVector   Unsupported("tsvector")?
   transcript     Transcript                  @relation(fields: [transcriptId], references: [id], onDelete: Cascade)
 
@@ -325,6 +329,7 @@ model Niche {
   parentId         String?
   depth            Int                         @default(0)
   centroid         Unsupported("vector(384)")?
+  embeddingModel   String?
   centroidCount    Int                         @default(0)
   channelCount     Int                         @default(0)
   parent           Niche?                      @relation("NicheTree", fields: [parentId], references: [id], onDelete: Cascade)
@@ -362,6 +367,7 @@ model Topic {
   videoCount     Int                         @default(0)
   channelCount   Int                         @default(0)
   embedding      Unsupported("vector(384)")?
+  embeddingModel String?
   searchVector   Unsupported("tsvector")?
   videos         VideoTopic[]
 

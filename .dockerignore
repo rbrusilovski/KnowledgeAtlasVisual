@@ -7,3 +7,9 @@ test-results
 playwright-report
 .cache
 .git
+.next-e2e
+backups
+*.dump
+*.dump.age
+*.dump.gpg
+.env.production

@@ -14,7 +14,7 @@ import { redis, key } from "@/server/redis";
 import { enqueue } from "@/server/jobs";
 import { log } from "@/server/logger";
 import { getVector, normalize, setVector } from "@/server/db/vector";
-import { getProvider } from "@/server/services/embeddings";
+import { getProvider, semanticAvailable, embeddingModelId } from "@/server/services/embeddings";
 import { slugify } from "@/server/services/topics";
 import { allowed as policyAllows } from "@/server/youtube/policy";
 
@@ -82,7 +82,7 @@ export async function suggestSubniches(opts: SuggestOptions = {}): Promise<Subni
     if (g.hasEdge(a, b)) g.updateEdgeAttribute(a, b, "weight", (x: number | undefined) => (x ?? 0) + w);
     else g.addEdge(a, b, { weight: w });
   };
-  const pairs = await db.$queryRaw<{ a: string; b: string; sim: number }[]>`
+  const pairs = !(await semanticAvailable()) ? [] : await db.$queryRaw<{ a: string; b: string; sim: number }[]>`
     SELECT x.id AS a, y.id AS b, 1 - (x.embedding <=> y.embedding) AS sim
     FROM "Channel" x JOIN "Channel" y ON x.id < y.id
     WHERE x.id = ANY(${ids}) AND y.id = ANY(${ids}) AND x.embedding IS NOT NULL AND y.embedding IS NOT NULL`;
@@ -166,10 +166,10 @@ export async function acceptSuggestion(input: AcceptInput, classify: (channelId:
     },
     select: { id: true, slug: true },
   });
-  const vecs = (await Promise.all(channels.map((c) => getVector("Channel", c.id)))).filter((v): v is number[] => Boolean(v));
+  const vecs = !(await semanticAvailable()) ? [] : (await Promise.all(channels.map((c) => getVector("Channel", c.id)))).filter((v): v is number[] => Boolean(v));
   if (vecs.length) {
     const mean = vecs[0]!.map((_, i) => vecs.reduce((s, v) => s + v[i]!, 0) / vecs.length);
-    await setVector("Niche", niche.id, normalize(mean));
+    await setVector("Niche", niche.id, normalize(mean), { model: embeddingModelId() });
     await db.niche.update({ where: { id: niche.id }, data: { centroidCount: vecs.length } });
   }
   onCreated();

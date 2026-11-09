@@ -65,7 +65,7 @@ describe("intelligence + graph pipeline (fixture mode)", () => {
     const ev = n.evidence as Record<string, unknown> & { components: Record<string, number>; sourceVideoIds: string[] };
     expect(ev.origin).toBe("atlas-inferred");
     expect(ev.taxonomyVersion).toBe(TAXONOMY_VERSION);
-    expect(ev.embeddingModel).toMatch(/^hash:/);
+    expect(ev.embeddingModel).toMatch(/^hash@384$/);
     expect(ev.confidence).toBe(n.confidence);
     const recombined = WEIGHTS.embedding * ev.components.embedding! + WEIGHTS.keyword * ev.components.keyword! + WEIGHTS.topic * ev.components.topic!;
     expect(recombined).toBeCloseTo(n.confidence, 3);

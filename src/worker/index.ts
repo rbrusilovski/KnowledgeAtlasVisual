@@ -10,6 +10,13 @@ const { startWorkers } = await import("./processors");
 const { registerSchedulers } = await import("./schedulers");
 const { startBoard } = await import("./board");
 
+// Attribute pre-tracking vectors to the configured model once (D4), then report a mixed vector space loudly.
+{
+  const { adoptLegacyVectors, embeddingSpace } = await import("@/server/services/embeddings");
+  await adoptLegacyVectors().catch((err) => baseLogger.warn({ err }, "could not attribute legacy vectors"));
+  const space = await embeddingSpace({ fresh: true }).catch(() => null);
+  if (space?.blocked) baseLogger.error({ reason: space.reason, stale: space.stale }, "embedding vector space is inconsistent — semantic features disabled until `pnpm embeddings:reindex`");
+}
 const workers = startWorkers();
 if (env.WORKER_SCHEDULERS) await registerSchedulers();
 const board = startBoard();

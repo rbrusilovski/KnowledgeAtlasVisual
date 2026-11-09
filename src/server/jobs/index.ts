@@ -61,7 +61,7 @@ export interface JobPayloads {
   communities: Record<string, never>;
   "ai-extract": { targetType: "video"; targetId: string; contentHash?: string; requestedBy?: string };
   compliance: Record<string, never>;
-  scheduler: { task?: "sync" | "stats" | "proposals" };
+  scheduler: { task?: "sync" | "stats" | "proposals" | "alerts" };
 }
 
 /** Queues whose jobs expand or refresh the corpus — only enqueueable under an approved, running proposal. */
@@ -155,7 +155,10 @@ export const enqueue = {
   classify: (channelId: string) => add(QUEUES.classify, { channelId }, { jobId: `cls-${channelId}-${Date.now()}`, deduplication: { id: `cls-${channelId}`, ttl: 5_000 } }),
   /** Debounced: dirty node IDs accumulate in a Redis set; one build drains them. */
   graph: async (dirtyNodeIds: string[]) => {
-    if (dirtyNodeIds.length) await redis.sadd(key("graph", "dirty"), ...dirtyNodeIds);
+    if (dirtyNodeIds.length) {
+      await redis.sadd(key("graph", "dirty"), ...dirtyNodeIds);
+      await redis.set(key("graph", "dirty-since"), String(Date.now()), "NX");
+    }
     return add(QUEUES.graph, {}, { delay: 1_500, deduplication: { id: "graph-build", ttl: 1_500, extend: true, replace: true, keepLastIfActive: true } });
   },
   graphFull: () => add(QUEUES.graph, { full: true }, { jobId: `graph-full-${Date.now()}` }),

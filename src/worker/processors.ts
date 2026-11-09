@@ -10,6 +10,7 @@ import { classifyChannel } from "@/server/services/classification";
 import { aiEnabled, extractVideo } from "@/server/services/ai";
 import { buildFromDirtySet, buildDirty, rebuildAll, computeCommunities, pruneTombstones } from "@/server/services/graph";
 import { db } from "@/server/db";
+import { emitAlertEvents } from "@/server/services/alerts";
 import { createWorker } from "./runtime";
 
 /**
@@ -35,6 +36,7 @@ export function startWorkers(): Worker[] {
     createWorker(QUEUES.scheduler, async (job) => {
       if (job.data.task === "stats") return ingestion.scheduleStatsRefresh();
       if (job.data.task === "proposals") return expireProposals();
+      if (job.data.task === "alerts") return emitAlertEvents();
       return ingestion.scheduleDueSyncs();
     }),
     createWorker(QUEUES.compliance, () => runCompliance()),

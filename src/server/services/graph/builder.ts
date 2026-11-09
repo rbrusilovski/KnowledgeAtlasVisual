@@ -13,6 +13,7 @@ import { log } from "@/server/logger";
 import { knn, getVector } from "@/server/db/vector";
 import { publish } from "@/server/services/realtime";
 import { allowed as policyAllows } from "@/server/youtube/policy";
+import { semanticAvailable } from "@/server/services/embeddings";
 
 export const MIN_TOPIC_VIDEOS = 2;
 const SIMILAR_MIN = 0.75;
@@ -220,7 +221,8 @@ async function channelEdges(youtubeId: string, extraDirty: Set<string>): Promise
   const featIn: EdgeRow[] = featuredIn.map((f) => ({ sourceId: `channel:${f.youtubeId}`, targetId: nodeId, kind: "FEATURED", weight: 1, evidence: { by: f.title } }));
 
   // SIMILAR via pgvector KNN.
-  const vec = await getVector("Channel", c.id);
+  // Never compare vectors from different embedding models (D4): no SIMILAR edges while a reindex is pending.
+  const vec = (await semanticAvailable()) ? await getVector("Channel", c.id) : null;
   const similar: Owned["votes"][number]["picks"] = [];
   if (vec) {
     const hits = await knn("Channel", vec, TOP_K, { excludeId: c.id, where: Prisma.sql`"isAvailable" = true` });
@@ -361,7 +363,7 @@ async function nicheEdges(slug: string, isSub: boolean): Promise<Owned> {
 
 // ── Persistence ────────────────────────────────────────────────────────────
 
-async function nextVersion(): Promise<bigint> {
+export async function nextVersion(): Promise<bigint> {
   const [r] = await db.$queryRaw<{ v: bigint }[]>`SELECT nextval('graph_version_seq') AS v`;
   return r!.v;
 }
@@ -397,14 +399,14 @@ async function upsertEdges(rows: EdgeRow[], version: bigint): Promise<number> {
   return n;
 }
 
-async function deleteEdges(ids: string[], version: bigint) {
+export async function deleteEdges(ids: string[], version: bigint) {
   if (!ids.length) return 0;
   await db.graphEdge.deleteMany({ where: { id: { in: ids } } });
   await db.graphTombstone.createMany({ data: ids.map((refId) => ({ kind: "edge", refId, version })) });
   return ids.length;
 }
 
-async function deleteNodes(ids: string[], version: bigint) {
+export async function deleteNodes(ids: string[], version: bigint) {
   if (!ids.length) return 0;
   const edges = await db.graphEdge.findMany({ where: { OR: [{ sourceId: { in: ids } }, { targetId: { in: ids } }] }, select: { id: true } });
   await deleteEdges(edges.map((e) => e.id), version);
@@ -517,8 +519,14 @@ export async function buildFromDirtySet(): Promise<BuildStats | null> {
     if (!ids.length) break;
     total.push(...ids);
   }
-  if (!total.length) return null;
-  return buildDirty(total);
+  if (!total.length) {
+    await redis.del(key("graph", "dirty-since"));
+    return null;
+  }
+  const stats = await buildDirty(total);
+  // Clear the staleness marker unless new ids arrived while building (D12: stale-graph alert).
+  if (!(await redis.scard(k))) await redis.del(key("graph", "dirty-since"));
+  return stats;
 }
 
 /** Every node ID that should exist, in dependency-friendly order. */

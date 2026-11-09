@@ -50,3 +50,6 @@ next-env.d.ts
 /.atlas/
 /.next-e2e/
 /.next-build/
+
+# Local database backups (scripts/db-backup.ts)
+backups/

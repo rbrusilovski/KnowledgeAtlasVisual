@@ -15,6 +15,7 @@ import { normalizePhrase, tokenize, singularize } from "@/server/services/topics
 import { aiEnabled, rerankNiche } from "@/server/services/ai";
 import { TAXONOMY } from "@/server/taxonomy";
 import { allowed as policyAllows } from "@/server/youtube/policy";
+import { embeddingModelId as currentEmbeddingModel, semanticAvailable } from "@/server/services/embeddings";
 
 export const WEIGHTS = { embedding: 0.55, keyword: 0.25, topic: 0.2 } as const;
 const MAX_LABELS = 3;
@@ -26,9 +27,6 @@ export const TAXONOMY_VERSION = `tax-${createHash("sha1")
   .update(JSON.stringify(TAXONOMY.map((n) => [n.slug, n.topicCategories, n.children.map((c) => [c.slug, c.keywords])])))
   .digest("hex")
   .slice(0, 10)}`;
-
-/** Identifies the vector space a channel embedding came from (provider + model + dimension). */
-export const embeddingModelId = () => `${env.EMBEDDING_PROVIDER}:${env.EMBEDDING_PROVIDER === "hash" ? "feature-hash" : env.EMBEDDING_MODEL}@${env.EMBEDDING_DIM}`;
 
 /** Provenance stored on ChannelNiche.evidence. Always Atlas-inferred, never official YouTube metadata. */
 export interface ClassificationEvidence {
@@ -158,7 +156,8 @@ export async function scoreChannel(channelId: string) {
   const text = [c.title, c.description, c.keywords.join(" . "), ...recent.map((r) => `${r.title} . ${r.tags.join(" . ")}`)].join(" . ");
   const subs = await subnicheProfiles();
   const kw = keywordScores(text, subs);
-  const vec = await getVector("Channel", channelId);
+  // Only compare with niche centroids when every stored vector comes from the same model (D4).
+  const vec = (await semanticAvailable()) ? await getVector("Channel", channelId) : null;
   const cos = new Map<string, number>();
   if (vec) {
     const rows = await db.$queryRaw<{ id: string; cos: number }[]>`
@@ -171,7 +170,7 @@ export async function scoreChannel(channelId: string) {
     const topicUrls = c.topicCategories.filter((u) => (TOPIC_CATEGORY_MAP.get(u) ?? []).includes(s.parentSlug));
     return { sub: s, parts, confidence: combine(parts), matched: kw.get(s.id)?.matched ?? [], rawCos: cos.get(s.id) ?? 0, topicUrls };
   });
-  const embeddingModel = vec ? embeddingModelId() : null;
+  const embeddingModel = vec ? currentEmbeddingModel() : null;
   return { channel: c, ranked, hasEmbedding: Boolean(vec), recentTitles: recent.map((r) => r.title), recentVideoIds: recent.map((r) => r.youtubeId), vec, embeddingModel };
 }
 
@@ -185,7 +184,7 @@ async function updateCentroid(nicheId: string, channelId: string, vec: number[])
   if (!row || !current) return;
   const w = row.centroidCount + SEED_WEIGHT;
   const next = normalize(current.map((x, i) => x * w + vec[i]!));
-  await setVector("Niche", nicheId, next);
+  await setVector("Niche", nicheId, next, { model: currentEmbeddingModel() });
   await db.niche.update({ where: { id: nicheId }, data: { centroidCount: { increment: 1 } } });
 }
 
