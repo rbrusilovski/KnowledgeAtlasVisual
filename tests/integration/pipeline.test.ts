@@ -168,6 +168,16 @@ describe("search (fixture mode)", () => {
     expect(hit.chunks![0]!.url).toMatch(/watch\?v=[\w-]{11}&t=\d+s$/);
   });
 
+  it("semantic transcript hits carry real video node ids and titles", async () => {
+    const { search } = await import("@/server/services/search");
+    const r = await search({ q: "kubernetes cluster deployment", mode: "semantic", types: ["transcript"], limit: 5 });
+    for (const h of r.items) {
+      expect(h.nodeId).toMatch(/^video:[\w-]{11}$/);
+      expect(h.title.length).toBeGreaterThan(0);
+      expect(h.chunks![0]!.url).toMatch(/watch\?v=[\w-]{11}&t=\d+s$/);
+    }
+  });
+
   it("channel-scoped search applies filters and facets", async () => {
     const { channelVideos } = await import("@/server/services/search");
     const { ChannelVideosQuery } = await import("@/shared/contracts/channels");

@@ -30,3 +30,4 @@ Format: decision — reason — alternative considered.
 - Local traversal fan-out per hop is 40 / 12 / 6 and does not expand through niche hubs or videos — keeps neighborhoods legible and bounded — uniform fan-out.
 - OpenAPI is generated from the shared Zod contracts with Zod 4's native `z.toJSONSchema` — no maintained Zod→OpenAPI library needed for Zod 4 — @asteasolutions/zod-to-openapi.
 - Account deletion also removes the user's uploaded transcripts and discovery history — they are personal contributions — keeping them anonymized.
+- Semantic search hits below a similarity floor (0.28 for local MiniLM, 0.05 for the hash provider) are dropped before RRF — semantic lists always return k items and otherwise inject unrelated niches into hybrid results — no floor.

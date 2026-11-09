@@ -267,7 +267,7 @@ function TranscriptPanel({ video, activeSec, onSeek, signedIn }: { video: VideoD
         ) : (
           <ol ref={listRef} className="space-y-1" data-testid="transcript-chunks">
             {data.chunks.map((c) => (
-              <li key={c.id} data-idx={c.idx} data-active={c.idx === activeIdx || undefined} className={cn("flex gap-2 rounded-control px-2 py-1.5 text-[13px] leading-relaxed", c.idx === activeIdx ? "bg-accent-500/15 ring-1 ring-accent-500/40" : hitIds.has(c.id) ? "bg-bg-3" : "")}>
+              <li key={c.id} data-idx={c.idx} data-active={c.idx === activeIdx || undefined} className={cn("flex items-start gap-2 rounded-control px-2 py-1.5 text-[13px] leading-relaxed", c.idx === activeIdx ? "bg-accent-500/15 ring-1 ring-accent-500/40" : hitIds.has(c.id) ? "bg-bg-3" : "")}>
                 <button onClick={() => onSeek(c.startSec)} className="num shrink-0 pt-px text-xs text-accent-300 hover:underline" aria-label={`Jump to ${fmtTimestamp(c.startSec)}`}>
                   {fmtTimestamp(c.startSec)}
                 </button>

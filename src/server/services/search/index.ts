@@ -4,13 +4,18 @@
  * transcript hits grouped by video with timestamped deep links.
  */
 import { db, Prisma } from "@/server/db";
-import { embedQuery } from "@/server/services/embeddings";
+import { embedQuery, getProvider } from "@/server/services/embeddings";
 import { toVectorLiteral } from "@/server/db/vector";
 import { decodeCursor, encodeCursor } from "@/server/http/cursor";
 import type { SearchHit, SearchMode, SearchType, SuggestItem } from "@/shared/contracts/search";
 import type { ChannelVideosQuery } from "@/shared/contracts/channels";
 
 export const RRF_K = 60;
+
+/** Semantic lists always return k items; drop weak matches so they can't pollute hybrid fusion. */
+function minSimilarity(): number {
+  return getProvider().name.startsWith("local") ? 0.28 : 0.05;
+}
 const HL = "StartSel=<mark>, StopSel=</mark>, MaxWords=28, MinWords=10, ShortWord=2, MaxFragments=2, FragmentDelimiter= … ";
 
 /** Reciprocal Rank Fusion over ranked ID lists. */
@@ -202,7 +207,7 @@ async function semanticNiches(vec: string, n: number): Promise<Ranked[]> {
 
 async function semanticTranscripts(vec: string, n: number, f: VideoFilter = {}): Promise<Ranked[]> {
   const rows = await db.$queryRaw<ChunkRow[]>`
-    SELECT x.* FROM (
+    SELECT x.*, meta.* FROM (
       SELECT tc.id AS "chunkId", t."videoId", tc."startSec", tc."endSec", tc.text, 1 - (tc.embedding <=> ${vec}::vector) AS rank
       FROM "TranscriptChunk" tc JOIN "Transcript" t ON t.id = tc."transcriptId"
       WHERE tc.embedding IS NOT NULL ORDER BY tc.embedding <=> ${vec}::vector LIMIT ${n * 6}
@@ -265,7 +270,8 @@ export async function search(p: SearchParams): Promise<SearchResult> {
   await Promise.all(
     p.types.map(async (t) => {
       const kw = effective !== "semantic" ? await KEYWORD[t](p.q, depth, f) : [];
-      const sem = vec && effective !== "keyword" ? await SEMANTIC[t](vec, depth, f) : [];
+      const floor = minSimilarity();
+      const sem = vec && effective !== "keyword" ? (await SEMANTIC[t](vec, depth, f)).filter((r) => r.hit.score >= floor) : [];
       for (const r of [...sem, ...kw]) {
         // Prefer the keyword version (has highlights) but keep transcript chunks from both.
         const prev = byKey.get(r.key);
