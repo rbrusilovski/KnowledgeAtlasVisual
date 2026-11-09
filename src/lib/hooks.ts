@@ -88,6 +88,7 @@ export interface QuotaDTO {
   model: string;
   buckets: { bucket: "general" | "search"; used: number; limit: number; remaining: number; backgroundCap: number; exhausted: boolean }[];
   user: { used: number; cap: number } | null;
+  data?: { demoChannels: number; liveChannels: number; liveCollection: boolean };
 }
 export function useQuota() {
   return useQuery({ queryKey: ["quota"], queryFn: () => api.get<QuotaDTO>("/api/quota"), refetchInterval: 60_000 });

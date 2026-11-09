@@ -227,6 +227,18 @@ export function TopBar() {
             <Badge tone="warning">Demo data</Badge>
           </span>
         </Tooltip>
+      ) : quota?.data?.demoChannels ? (
+        <Tooltip content={`Live mode, but ${quota.data.demoChannels} fictional demo channel(s) are still in this database. Retire them with \`pnpm demo:retire --yes\` (dry run without --yes).`}>
+          <span data-testid="data-status">
+            <Badge tone="danger">Live + {quota.data.demoChannels} demo</Badge>
+          </span>
+        </Tooltip>
+      ) : quota ? (
+        <Tooltip content={quota.data?.liveCollection ? "Real YouTube data (YouTube Data API). New collection needs your approval." : "Real YouTube data mode, but live collection is disabled (YOUTUBE_LIVE_COLLECTION_ENABLED=false)."}>
+          <span data-testid="data-status">
+            <Badge tone={quota.data?.liveCollection ? "success" : "neutral"}>YouTube data</Badge>
+          </span>
+        </Tooltip>
       ) : null}
       <LiveIndicator />
       <UserMenu />

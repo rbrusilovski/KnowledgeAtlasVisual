@@ -13,7 +13,8 @@ import { db, type Prisma, type HistoryState, type SyncTier } from "@/server/db";
 import { AppError } from "@/server/errors";
 import { enqueue, enqueueExpansion, expansionJobId, type ExpansionAuth, type Lane } from "@/server/jobs";
 import { log } from "@/server/logger";
-import { youtube, withYouTubeContext, normalizeChannel, normalizeVideo, policyAllows, type YtChannel, type YtVideo } from "@/server/youtube";
+import { redis, key } from "@/server/redis";
+import { youtube, youtubeMode, withYouTubeContext, normalizeChannel, normalizeVideo, policyAllows, type YtChannel, type YtVideo } from "@/server/youtube";
 import * as quota from "@/server/services/quota";
 import { withLock } from "@/server/services/cache";
 import { publish } from "@/server/services/realtime";
@@ -30,7 +31,7 @@ import {
   type ExpansionScope,
 } from "@/server/services/expansion";
 import { reserveUserDiscovery, refundUserDiscovery } from "@/server/services/quota";
-import { embedTexts } from "@/server/services/embeddings";
+import { embedTexts, embedEntities } from "@/server/services/embeddings";
 import { toVectorLiteral } from "@/server/db/vector";
 
 export { parseKeywords } from "@/server/youtube";
@@ -99,7 +100,8 @@ async function upsertChannel(c: YtChannel, aliases: string[], at: Date, tx: Pris
     id = existing.id;
     await tx.channel.update({ where: { id }, data: { ...(data as Prisma.ChannelUpdateInput), ...fresh } });
   } else {
-    id = (await tx.channel.create({ data: { title: c.id, ...(data as Omit<Prisma.ChannelCreateInput, "title">), ...fresh } as Prisma.ChannelCreateInput, select: { id: true } })).id;
+    const dataOrigin = youtubeMode() === "fixture" ? "FIXTURE" : "YOUTUBE";
+    id = (await tx.channel.create({ data: { title: c.id, ...(data as Omit<Prisma.ChannelCreateInput, "title">), ...fresh, dataOrigin } as Prisma.ChannelCreateInput, select: { id: true } })).id;
   }
   const allAliases = new Set([`id:${c.id}`, ...aliases]);
   if (typeof data.handle === "string") allAliases.add(`handle:${data.handle}`);
@@ -283,6 +285,8 @@ async function collectHistory(channel: { id: string; youtubeId: string; uploadsP
           lastError: null,
           lastProposalId: a.proposal.id,
           completedAt: exhausted ? at : undefined,
+          // A scan that starts at the newest upload is contiguous from there down → safe sync watermark.
+          ...(!token && history.pageOffset === 0 && take[0]?.publishedAt ? { syncWatermark: new Date(take[0].publishedAt) } : {}),
           ...(oldest && (!history.oldestPublishedAt || oldest < history.oldestPublishedAt) ? { oldestPublishedAt: oldest } : {}),
           ...(newest && (!history.newestPublishedAt || newest > history.newestPublishedAt) ? { newestPublishedAt: newest } : {}),
         },
@@ -496,6 +500,61 @@ export interface SyncResult {
   pages: number;
   units: number;
   boundReached: boolean;
+  /** The scan reached the sync watermark (+ overlap) or the end of the playlist, so no gap remains above it. */
+  reconciled?: boolean;
+}
+
+/** Items scanned past the watermark (catches uploads that appear slightly out of order, e.g. premieres). */
+export const SYNC_OVERLAP_ITEMS = 10;
+/** Upper bound on playlist pages one sync may read while reconciling (50 items/page, 1 unit each). */
+export const SYNC_MAX_PAGES = 20;
+
+/**
+ * Newest-first scan that does NOT stop at the first known upload. It skips known items and keeps going until it has
+ * passed the watermark by SYNC_OVERLAP_ITEMS (or the playlist ends), so uploads missed by a bounded or failed earlier
+ * sync — which sit *below* newer known items — are still found. Without a watermark (legacy) it falls back to
+ * stopping at the first known upload. Only unknown items are fetched with videos.list.
+ */
+export async function scanForNewUploads(playlistId: string, bound: number, watermark: Date | null) {
+  const fresh: { videoId: string; publishedAt?: string }[] = [];
+  let pages = 0;
+  let token: string | undefined;
+  let reachedKnown = false;
+  let pastWatermark = 0;
+  let boundHit = false;
+  let newestSeen: Date | null = null;
+  let done = false;
+  do {
+    const page = await youtube.getPlaylistItems(playlistId, token);
+    pages++;
+    const known = new Set((await db.video.findMany({ where: { youtubeId: { in: page.items.map((i) => i.videoId) } }, select: { youtubeId: true } })).map((v) => v.youtubeId));
+    for (const item of page.items) {
+      const at = item.publishedAt ? new Date(item.publishedAt) : null;
+      if (at && (!newestSeen || at > newestSeen)) newestSeen = at;
+      const isKnown = known.has(item.videoId);
+      if (isKnown) reachedKnown = true;
+      if (!watermark) {
+        if (isKnown) {
+          done = true;
+          break;
+        }
+      } else if (at && at < watermark && ++pastWatermark >= SYNC_OVERLAP_ITEMS) {
+        if (!isKnown && fresh.length < bound) fresh.push(item);
+        done = true;
+        break;
+      }
+      if (isKnown) continue;
+      if (fresh.length >= bound) {
+        boundHit = true;
+        done = true;
+        break;
+      }
+      fresh.push(item);
+    }
+    token = page.nextPageToken;
+  } while (token && !done && pages < SYNC_MAX_PAGES);
+  const reconciled = !boundHit && (done || !token);
+  return { fresh, pages, reachedKnown, reconciled, boundHit, newestSeen };
 }
 
 /** Newest-first; stops at the first known upload or the approved per-channel bound. Refreshes the channel record. */
@@ -517,26 +576,9 @@ export async function syncChannel(input: SyncInput, ctl: JobControl): Promise<Sy
         const ch = await db.$transaction((tx) => upsertChannel(yt, [], new Date(), tx), TX);
         const playlist = (await db.channel.findUniqueOrThrow({ where: { id: channel.id }, select: { uploadsPlaylistId: true } })).uploadsPlaylistId;
         const bound = a.scope.maxNewVideosPerChannel;
-        const fresh: { videoId: string; publishedAt?: string }[] = [];
-        let pages = 0;
-        let token: string | undefined;
-        let reachedKnown = false;
-        if (playlist) {
-          do {
-            const page = await youtube.getPlaylistItems(playlist, token);
-            pages++;
-            const known = new Set((await db.video.findMany({ where: { youtubeId: { in: page.items.map((i) => i.videoId) } }, select: { youtubeId: true } })).map((v) => v.youtubeId));
-            for (const item of page.items) {
-              if (known.has(item.videoId)) {
-                reachedKnown = true;
-                break;
-              }
-              if (fresh.length >= bound) break;
-              fresh.push(item);
-            }
-            token = page.nextPageToken;
-          } while (token && !reachedKnown && fresh.length < bound);
-        }
+        const history = await db.uploadHistory.findUnique({ where: { channelId: channel.id }, select: { syncWatermark: true } });
+        const plan = playlist ? await scanForNewUploads(playlist, bound, history?.syncWatermark ?? null) : { fresh: [], pages: 0, reachedKnown: false, reconciled: false, boundHit: false, newestSeen: null };
+        const { fresh, pages, reachedKnown } = plan;
         await ctl.progress(40, "videos", { runId: run.id, found: fresh.length });
         const vs = emptyStats();
         for (let i = 0; i < fresh.length; i += 50) {
@@ -557,14 +599,18 @@ export async function syncChannel(input: SyncInput, ctl: JobControl): Promise<Sy
           vs.updated.push(...s.updated);
           vs.notReturned.push(...s.notReturned);
         }
-        // A bound hit before reaching a known upload means a gap: more new uploads exist than were approved.
-        const boundReached = !reachedKnown && fresh.length >= bound;
+        // Bound hit before reconciling with the watermark ⇒ more new uploads exist than were approved; the watermark is
+        // NOT advanced, so the next approved sync re-scans down to it and collects the gap.
+        const boundReached = plan.boundHit;
+        if (plan.reconciled && !plan.boundHit && plan.newestSeen) {
+          await db.uploadHistory.updateMany({ where: { channelId: channel.id }, data: { syncWatermark: plan.newestSeen } });
+        }
         await refreshLatest(channel.id);
         await fanOut(channel, [...vs.created, ...vs.updated], ch.changed, a, a.scope.includeTranscripts);
         await updateTier(channel.id);
-        await finishRun(run.id, acc, "completed", { newVideos: vs.created.length, pages, boundReached, notReturned: vs.notReturned.length });
+        await finishRun(run.id, acc, "completed", { newVideos: vs.created.length, pages, boundReached, reconciled: plan.reconciled, reachedKnown, notReturned: vs.notReturned.length });
         await ctl.progress(100, "done", { runId: run.id });
-        return { newVideos: vs.created.length, pages, units: acc.units, boundReached };
+        return { newVideos: vs.created.length, pages, units: acc.units, boundReached, reconciled: plan.reconciled };
       });
     } catch (err) {
       await finishRun(run.id, acc, "failed", {}, err instanceof Error ? err.message : String(err));
@@ -856,4 +902,74 @@ export async function scheduleStatsRefresh(): Promise<{ proposed: number; propos
     { kind: "system" },
   );
   return { proposed: rows.length, proposalId: p.id };
+}
+
+// ── Demo → live transition ─────────────────────────────────────────────────
+
+export interface RetireReport {
+  dryRun: boolean;
+  channels: number;
+  videos: number;
+  transcripts: number;
+  topicsPruned: number;
+  graphNodesDirty: number;
+  /** User-created references that are KEPT (collections, discovery history). */
+  keptCollectionItems: number;
+  keptUsers: number;
+  nichesReset: number;
+}
+
+/**
+ * Remove the fictional fixture dataset (dataOrigin = FIXTURE) from a live deployment WITHOUT touching user-created
+ * data: users, workspaces, collections (items are kept even if they point at retired nodes), saved views, layouts,
+ * discovery history and proposals/runs (audit trail) all stay. Derived data cascades with the channels; orphaned
+ * topics are pruned; niche centroids learned from demo channels are reset to the seeded taxonomy and re-embedded;
+ * graph nodes are rebuilt from the dirty set. Dry run by default.
+ */
+export async function retireFixtureData(opts: { dryRun: boolean }): Promise<RetireReport> {
+  const channels = await db.channel.findMany({ where: { dataOrigin: "FIXTURE" }, select: { id: true, youtubeId: true } });
+  const ids = channels.map((c) => c.id);
+  const videos = await db.video.findMany({ where: { channelId: { in: ids } }, select: { id: true, youtubeId: true } });
+  const report: RetireReport = {
+    dryRun: opts.dryRun,
+    channels: channels.length,
+    videos: videos.length,
+    transcripts: await db.transcript.count({ where: { video: { channelId: { in: ids } } } }),
+    topicsPruned: 0,
+    graphNodesDirty: 0,
+    keptCollectionItems: await db.collectionItem.count({ where: { nodeId: { in: [...channels.map((c) => `channel:${c.youtubeId}`), ...videos.map((v) => `video:${v.youtubeId}`)] } } }),
+    keptUsers: await db.user.count(),
+    nichesReset: 0,
+  };
+  if (opts.dryRun || !channels.length) return report;
+
+  const topicsBefore = await db.topic.findMany({ where: { videos: { some: { video: { channelId: { in: ids } } } } }, select: { id: true, slug: true } });
+  await db.aiExtraction.deleteMany({ where: { targetType: "video", targetId: { in: videos.map((v) => v.id) } } });
+  for (let i = 0; i < ids.length; i += 50) await db.channel.deleteMany({ where: { id: { in: ids.slice(i, i + 50) } } }); // cascades
+  // Any topic no video references any more is derived data without a source (including pre-existing orphans).
+  const orphans = await db.topic.findMany({ where: { videos: { none: {} } }, select: { id: true, slug: true } });
+  topicsBefore.push(...orphans.filter((o) => !topicsBefore.some((t) => t.id === o.id)));
+  await db.topic.deleteMany({ where: { id: { in: orphans.map((o) => o.id) } } });
+  report.topicsPruned = orphans.length;
+  await db.$executeRaw`
+    UPDATE "Topic" t SET "videoCount" = coalesce(x.v, 0), "channelCount" = coalesce(x.c, 0) FROM (
+      SELECT t2.id, count(DISTINCT vt."videoId")::int v, count(DISTINCT v."channelId")::int c FROM "Topic" t2
+      LEFT JOIN "VideoTopic" vt ON vt."topicId" = t2.id LEFT JOIN "Video" v ON v.id = vt."videoId" GROUP BY t2.id) x
+    WHERE x.id = t.id`;
+  // Centroids learned from fictional channels must not shape real classification: reset to the seeded taxonomy.
+  const niches = await db.niche.findMany({ select: { id: true, slug: true, depth: true } });
+  await db.$executeRaw`UPDATE "Niche" SET centroid = NULL, "centroidCount" = 0, "channelCount" = 0`;
+  for (const n of niches) await redis.del(key("centroid", "contrib", n.id));
+  report.nichesReset = niches.length;
+  await embedEntities("niche", niches.map((n) => n.id)); // taxonomy text only (no API data)
+  const dirty = [
+    ...channels.map((c) => `channel:${c.youtubeId}`),
+    ...videos.map((v) => `video:${v.youtubeId}`),
+    ...topicsBefore.map((t) => `topic:${t.slug}`),
+    ...niches.map((n) => `${n.depth === 0 ? "niche" : "subniche"}:${n.slug}`),
+  ];
+  report.graphNodesDirty = dirty.length;
+  await enqueue.graph(dirty);
+  log().info(report, "fixture data retired");
+  return report;
 }

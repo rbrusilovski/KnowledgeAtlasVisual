@@ -192,26 +192,55 @@ describe("bounds, checkpoints and resumability", () => {
     expect(done.completedAt).toBeTruthy();
   });
 
-  it("incremental sync stops at the first known upload and respects its bound", async () => {
-    process.env.FIXTURE_NOW = new Date(Date.now() - 60 * DAY).toISOString();
+  it("a bounded sync never leaves a permanent gap: the next sync reconciles down to the watermark", async () => {
+    process.env.FIXTURE_NOW = new Date(Date.now() - 120 * DAY).toISOString();
     resetFixtureStore();
     await ingest();
     const ch = await db.channel.findUniqueOrThrow({ where: { youtubeId: FIXTURE_CHANNEL } });
-    const initial = await db.video.count({ where: { channelId: ch.id } });
+    const watermark0 = (await db.uploadHistory.findFirstOrThrow()).syncWatermark;
+    expect(watermark0).toBeTruthy();
     delete process.env.FIXTURE_NOW;
     await flushRedis();
-    const p = await approved({ kind: "SYNC_UPLOADS", channelYoutubeIds: [FIXTURE_CHANNEL], maxNewVideosPerChannel: 1, includeTranscripts: false }, owner);
-    const s = await ingestion.syncChannel({ auth: authOf(p), lane: "background", youtubeId: FIXTURE_CHANNEL }, ctlFor(p.jobIds[0]!));
-    expect(s.newVideos).toBe(1);
-    expect(s.boundReached).toBe(true);
-    expect(await db.video.count({ where: { channelId: ch.id } })).toBe(initial + 1);
+    const visible = await fixtureUploads(FIXTURE_CHANNEL);
+    const initial = await db.video.count({ where: { channelId: ch.id } });
+    expect(visible.length - initial).toBeGreaterThanOrEqual(3);
+
+    const p1 = await approved({ kind: "SYNC_UPLOADS", channelYoutubeIds: [FIXTURE_CHANNEL], maxNewVideosPerChannel: 1, includeTranscripts: false }, owner);
+    const s1 = await ingestion.syncChannel({ auth: authOf(p1), lane: "background", youtubeId: FIXTURE_CHANNEL }, ctlFor(p1.jobIds[0]!));
+    expect(s1).toMatchObject({ newVideos: 1, boundReached: true, reconciled: false });
+    expect((await db.uploadHistory.findFirstOrThrow()).syncWatermark).toEqual(watermark0); // not advanced past the gap
+
+    // The old behaviour stopped at the first known upload (the one just collected) and lost everything below it.
     const p2 = await approved({ kind: "SYNC_UPLOADS", channelYoutubeIds: [FIXTURE_CHANNEL], maxNewVideosPerChannel: 200, includeTranscripts: false }, owner);
     const s2 = await ingestion.syncChannel({ auth: authOf(p2), lane: "background", youtubeId: FIXTURE_CHANNEL }, ctlFor(p2.jobIds[0]!));
-    expect(s2.boundReached).toBe(false);
+    expect(s2).toMatchObject({ boundReached: false, reconciled: true });
+    expect(s2.newVideos).toBe(visible.length - initial - 1);
+    expect((await db.video.findMany({ where: { channelId: ch.id }, select: { youtubeId: true } })).map((v) => v.youtubeId).sort()).toEqual([...visible].sort());
+
     const p3 = await approved({ kind: "SYNC_UPLOADS", channelYoutubeIds: [FIXTURE_CHANNEL], maxNewVideosPerChannel: 200, includeTranscripts: false }, owner);
     const s3 = await ingestion.syncChannel({ auth: authOf(p3), lane: "background", youtubeId: FIXTURE_CHANNEL }, ctlFor(p3.jobIds[0]!));
-    expect(s3).toMatchObject({ newVideos: 0, pages: 1 });
+    expect(s3).toMatchObject({ newVideos: 0, pages: 1, reconciled: true });
     expect(s3.units).toBeLessThanOrEqual(3);
+  });
+
+  it("recovers uploads lost by a partially failed earlier sync", async () => {
+    process.env.FIXTURE_NOW = new Date(Date.now() - 120 * DAY).toISOString();
+    resetFixtureStore();
+    await ingest();
+    const watermark0 = (await db.uploadHistory.findFirstOrThrow()).syncWatermark;
+    delete process.env.FIXTURE_NOW;
+    await flushRedis();
+    const p1 = await approved({ kind: "SYNC_UPLOADS", channelYoutubeIds: [FIXTURE_CHANNEL], maxNewVideosPerChannel: 200, includeTranscripts: false }, owner);
+    await ingestion.syncChannel({ auth: authOf(p1), lane: "background", youtubeId: FIXTURE_CHANNEL }, ctlFor(p1.jobIds[0]!));
+    const visible = await fixtureUploads(FIXTURE_CHANNEL);
+    // Simulate a sync that committed only its first batch and then died: middle uploads missing, watermark unchanged.
+    const lost = visible.slice(1, 3);
+    await db.video.deleteMany({ where: { youtubeId: { in: lost } } });
+    await db.uploadHistory.updateMany({ data: { syncWatermark: watermark0 } });
+    const p2 = await approved({ kind: "SYNC_UPLOADS", channelYoutubeIds: [FIXTURE_CHANNEL], maxNewVideosPerChannel: 200, includeTranscripts: false }, owner);
+    const s2 = await ingestion.syncChannel({ auth: authOf(p2), lane: "background", youtubeId: FIXTURE_CHANNEL }, ctlFor(p2.jobIds[0]!));
+    expect(s2.newVideos).toBe(2);
+    expect(await db.video.count({ where: { youtubeId: { in: lost } } })).toBe(2);
   });
 
   it("scheduled sync only proposes — it never adds uploads by itself", async () => {
@@ -434,5 +463,39 @@ describe("drift re-scan + proposal routes", () => {
     expect(x.status).toBe(404);
     const anon = await approveRoute.POST(req(`/api/expansions/${dp.id}/approve`, { method: "POST", body: { scopeHash: dp.scopeHash } }), ctx({ id: dp.id }));
     expect(anon.status).toBe(401);
+  });
+});
+
+describe("demo → live transition", () => {
+  it("retires only fixture-origin records and keeps real channels and user-created data", async () => {
+    const { retireFixtureData } = await import("@/server/services/ingestion");
+    const { seedTaxonomy } = await import("@/server/services/classification");
+    const { embedEntities } = await import("@/server/services/embeddings");
+    const { buildDirty, buildFromDirtySet } = await import("@/server/services/graph");
+    await embedEntities("niche", await seedTaxonomy());
+    await ingest(10); // fixture mode → dataOrigin FIXTURE
+    await ingest(10, "UCEuOyNcOAiA66JNfVjlPDS6");
+    const real = await db.channel.update({ where: { youtubeId: "UCEuOyNcOAiA66JNfVjlPDS6" }, data: { dataOrigin: "YOUTUBE" } });
+    expect((await db.channel.findUniqueOrThrow({ where: { youtubeId: FIXTURE_CHANNEL } })).dataOrigin).toBe("FIXTURE");
+    await buildDirty([`channel:${FIXTURE_CHANNEL}`, `channel:${real.youtubeId}`]);
+    const ws = await db.workspace.create({ data: { ownerId: owner.id, name: "w", collections: { create: { name: "c" } } }, include: { collections: true } });
+    await db.collectionItem.create({ data: { collectionId: ws.collections[0]!.id, nodeId: `channel:${FIXTURE_CHANNEL}`, note: "mine" } });
+
+    const dry = await retireFixtureData({ dryRun: true });
+    expect(dry).toMatchObject({ dryRun: true, channels: 1, videos: 10, keptCollectionItems: 1 });
+    expect(await db.channel.count()).toBe(2); // dry run changes nothing
+
+    const r = await retireFixtureData({ dryRun: false });
+    expect(r.channels).toBe(1);
+    while (await buildFromDirtySet()) {
+      /* drain */
+    }
+    expect(await db.channel.findMany({ select: { youtubeId: true } })).toEqual([{ youtubeId: real.youtubeId }]);
+    expect(await db.video.count({ where: { channelId: real.id } })).toBe(10);
+    expect(await db.graphNode.count({ where: { id: `channel:${FIXTURE_CHANNEL}` } })).toBe(0);
+    expect(await db.graphNode.count({ where: { id: `channel:${real.youtubeId}` } })).toBe(1);
+    expect(await db.collectionItem.count({ where: { note: "mine" } })).toBe(1); // user data untouched
+    expect(await db.user.count({ where: { id: owner.id } })).toBe(1);
+    expect(await db.$queryRaw<{ n: number }[]>`SELECT count(*)::int n FROM "Niche" WHERE centroid IS NULL`).toEqual([{ n: 0 }]);
   });
 });

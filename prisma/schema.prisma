@@ -57,6 +57,12 @@ enum Role {
   ADMIN
 }
 
+/// Where a channel's records came from. FIXTURE = the fictional demo dataset (never real YouTube data).
+enum DataOrigin {
+  YOUTUBE
+  FIXTURE
+}
+
 enum TranscriptVisibility {
   PRIVATE // only the owner (uploader / authorizing user)
   CORPUS // shared corpus (fixture/demo only today)
@@ -182,6 +188,8 @@ model Channel {
   latestVideoAt         DateTime?
   featuredChannelIds    String[]
   isAvailable           Boolean                     @default(true)
+  /// Set at ingest from YOUTUBE_MODE; lets live deployments detect and retire demo records (pnpm demo:retire).
+  dataOrigin            DataOrigin                  @default(YOUTUBE)
   embeddingHash         String?
   embedding             Unsupported("vector(384)")?
   searchVector          Unsupported("tsvector")?
@@ -196,6 +204,7 @@ model Channel {
   @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "Channel_title_trgm_idx")
   @@index([handle(ops: raw("gin_trgm_ops"))], type: Gin, map: "Channel_handle_trgm_idx")
   @@index([lastRefreshedAt])
+  @@index([dataOrigin])
   @@index([searchVector], type: Gin, map: "Channel_searchVector_idx")
 }
 
@@ -583,6 +592,9 @@ model UploadHistory {
   unavailableCount  Int          @default(0)
   oldestPublishedAt DateTime?
   newestPublishedAt DateTime?
+  /// Sync watermark: every upload published at/before this (down to the history scan) is known to be collected.
+  /// Advanced only by a sync/scan that completed without hitting its bound, so bounded or failed syncs never leave gaps.
+  syncWatermark     DateTime?
   totalResults      Int?
   lastPageAt        DateTime?
   completedAt       DateTime?

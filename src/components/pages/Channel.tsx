@@ -22,6 +22,8 @@ import type { SearchHit } from "@/shared/contracts/search";
 import type { RelatedCreator } from "@/shared/contracts/graph";
 
 interface ChannelDetail {
+  dataOrigin?: "YOUTUBE" | "FIXTURE";
+  attribution?: string;
   id: string;
   youtubeId: string;
   nodeId: string;
@@ -96,7 +98,14 @@ export function ChannelPage({ id }: { id: string }) {
       <header className="flex flex-wrap items-start gap-5">
         <img src={c.thumbnailUrl ?? ""} alt="" className="size-20 rounded-full border border-border bg-bg-3" />
         <div className="min-w-0 flex-1">
-          <h1 className="text-2xl text-text-1">{c.title}</h1>
+          <h1 className="text-2xl text-text-1">
+            {c.title}
+            {c.dataOrigin === "FIXTURE" ? (
+              <Badge tone="warning" className="ml-2 align-middle">
+                Demo · fictional
+              </Badge>
+            ) : null}
+          </h1>
           <div className="mt-1 text-sm text-text-3">
             {c.handle ? `@${c.handle}` : c.youtubeId}
             {c.country ? ` · ${c.country}` : ""}

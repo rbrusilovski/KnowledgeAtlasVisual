@@ -23,7 +23,10 @@
     "format": "prettier --write .",
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "yt:smoke": "tsx scripts/yt-smoke.ts",
+    "demo:retire": "tsx scripts/demo-retire.ts",
+    "yt:candidates": "tsx scripts/yt-candidates.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
