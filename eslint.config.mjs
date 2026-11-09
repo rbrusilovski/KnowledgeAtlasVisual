@@ -21,6 +21,8 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
       "@typescript-eslint/consistent-type-imports": ["error", { fixStyle: "inline-type-imports" }],
       "no-restricted-imports": ["error", { patterns: [serviceInternals] }],
+      // Thumbnails/avatars come from YouTube CDNs (already sized) or our SVG placeholder route.
+      "@next/next/no-img-element": "off",
     },
   },
   {
