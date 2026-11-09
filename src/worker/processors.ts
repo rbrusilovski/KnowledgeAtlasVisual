@@ -7,6 +7,7 @@ import { embedEntities, warmup } from "@/server/services/embeddings";
 import { extractTopics, applyAiTopics } from "@/server/services/topics";
 import { classifyChannel } from "@/server/services/classification";
 import { aiEnabled, extractVideo } from "@/server/services/ai";
+import { buildFromDirtySet, buildDirty, rebuildAll, computeCommunities, pruneTombstones } from "@/server/services/graph";
 import { createWorker } from "./runtime";
 
 /** Each queue → processor. Kept thin: all logic lives in services. */
@@ -36,6 +37,16 @@ export function startWorkers(): Worker[] {
       return r;
     }),
     createWorker(QUEUES.classify, (job) => classifyChannel(job.data.channelId)),
+    createWorker(QUEUES.graph, async (job) => {
+      const stats = job.data.full ? await rebuildAll() : job.data.dirtyNodeIds?.length ? await buildDirty(job.data.dirtyNodeIds) : await buildFromDirtySet();
+      // Communities after significant change (debounced job).
+      if (stats && (stats.edgesChanged + stats.edgesRemoved > 0 || stats.nodesRemoved > 0)) await enqueue.communities();
+      return stats ?? { idle: true };
+    }),
+    createWorker(QUEUES.communities, async () => {
+      await pruneTombstones();
+      return computeCommunities();
+    }),
     createWorker(QUEUES.ai, async (job) => {
       if (!aiEnabled()) return { skipped: "ai disabled" };
       const r = await extractVideo(job.data.targetId);
