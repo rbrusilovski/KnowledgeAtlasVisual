@@ -9,13 +9,14 @@ import { db } from "@/server/db";
 
 /**
  * Transcripts are scoped to the viewer: their own private uploads / owner captions plus the shared (fixture) corpus.
- * Anonymous callers only ever see the shared corpus. Another user's private transcript is indistinguishable from none.
+ * Sign-in is required (plan Phase 0: `auth: "required"`); another user's private transcript is indistinguishable
+ * from none.
  */
 export const GET = withRoute(
-  { auth: "optional", params: IdParam, query: z.object({ q: z.string().trim().max(200).optional(), transcriptId: z.string().max(40).optional() }) },
+  { auth: "required", params: IdParam, query: z.object({ q: z.string().trim().max(200).optional(), transcriptId: z.string().max(40).optional() }) },
   async ({ params, query, user }) => {
     const id = await findVideoId(params.id);
-    const t = await getTranscript(id, { userId: user?.id ?? null }, query.transcriptId);
+    const t = await getTranscript(id, { userId: user.id }, query.transcriptId);
     if (!t) return withMeta(null, { available: false });
     if (!query.q) return withMeta(t, { available: true });
     const yt = (await db.video.findUniqueOrThrow({ where: { id }, select: { youtubeId: true } })).youtubeId;

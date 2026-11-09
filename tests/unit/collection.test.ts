@@ -28,10 +28,11 @@ const fullVideo = ytVideo.parse({
 describe("normalization", () => {
   it("keeps every thumbnail variant with dimensions and picks a preferred display variant", () => {
     expect(thumbnailVariants(fullVideo.snippet!.thumbnails)).toEqual([
-      { variant: "default", url: "d", width: 120, height: 90 },
-      { variant: "high", url: "h", width: 480, height: 360 },
-      { variant: "maxres", url: "m", width: 1280, height: 720 },
+      { variant: "default", url: "d", width: 120, height: 90, source: "youtube-data-api" },
+      { variant: "high", url: "h", width: 480, height: 360, source: "youtube-data-api" },
+      { variant: "maxres", url: "m", width: 1280, height: 720, source: "youtube-data-api" },
     ]);
+    expect(thumbnailVariants(fullVideo.snippet!.thumbnails, "fixture").every((t) => t.source === "fixture")).toBe(true);
     expect(normalizeVideo(fullVideo).data.thumbnailUrl).toBe("h");
   });
 

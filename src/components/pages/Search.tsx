@@ -69,6 +69,11 @@ export function SearchPage() {
             Only my transcripts
           </label>
         ) : null}
+        {q && (type === "transcript" || type === "all") && me.data === null ? (
+          <span className="ml-2 pb-1 text-xs text-text-3" data-testid="search-transcripts-signin">
+            <Link href={`/signin?next=${encodeURIComponent(`/search?q=${encodeURIComponent(q)}`)}`} className="text-accent-300 hover:underline">Sign in</Link> to search transcripts
+          </span>
+        ) : null}
         <div className="ml-auto flex items-center gap-1 pb-1" role="radiogroup" aria-label="Search mode">
           {MODES.map((m) => (
             <button key={m} role="radio" aria-checked={mode === m} onClick={() => set({ mode: m === "hybrid" ? null : m })} className={cn("h-7 rounded-control px-2 text-xs capitalize", mode === m ? "bg-bg-3 text-text-1" : "text-text-3 hover:text-text-1")}>

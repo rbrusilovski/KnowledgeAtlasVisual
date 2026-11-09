@@ -165,7 +165,7 @@ export function VideoPage({ id }: { id: string }) {
           </p>
           <p className="mt-4 text-[11px] text-text-3">Video data from the YouTube Data API.</p>
         </div>
-        <TranscriptPanel video={v} activeSec={t} onSeek={seek} signedIn={Boolean(me.data)} />
+        <TranscriptPanel video={v} activeSec={t} onSeek={seek} signedIn={Boolean(me.data)} authPending={me.isPending} />
       </div>
     </Page>
   );
@@ -252,7 +252,7 @@ function AiSummary({ v, canRun }: { v: VideoDetail; canRun: boolean }) {
   );
 }
 
-function TranscriptPanel({ video, activeSec, onSeek, signedIn }: { video: VideoDetail; activeSec: number | null; onSeek: (s: number) => void; signedIn: boolean }) {
+function TranscriptPanel({ video, activeSec, onSeek, signedIn, authPending }: { video: VideoDetail; activeSec: number | null; onSeek: (s: number) => void; signedIn: boolean; authPending: boolean }) {
   const [q, setQ] = useState("");
   const [dq, setDq] = useState("");
   const [upload, setUpload] = useState(false);
@@ -262,7 +262,8 @@ function TranscriptPanel({ video, activeSec, onSeek, signedIn }: { video: VideoD
     const t = setTimeout(() => setDq(q.trim()), 200);
     return () => clearTimeout(t);
   }, [q]);
-  const r = useQuery({ queryKey: ["transcript", video.youtubeId, dq, trackId], queryFn: () => api.getWithMeta<TranscriptDTO | null>(`/api/videos/${video.youtubeId}/transcript`, { q: dq || undefined, transcriptId: trackId }) });
+  // Transcripts require sign-in (the route is auth-required), so signed-out viewers never request them.
+  const r = useQuery({ queryKey: ["transcript", video.youtubeId, dq, trackId], enabled: signedIn, queryFn: () => api.getWithMeta<TranscriptDTO | null>(`/api/videos/${video.youtubeId}/transcript`, { q: dq || undefined, transcriptId: trackId }) });
   const remove = async (id: string) => {
     try {
       await api.del(`/api/videos/${video.youtubeId}/transcript?transcriptId=${encodeURIComponent(id)}`);
@@ -341,8 +342,14 @@ function TranscriptPanel({ video, activeSec, onSeek, signedIn }: { video: VideoD
         </div>
       ) : null}
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        {r.isLoading ? (
+        {authPending || r.isLoading ? (
           <div className="space-y-2 p-2">{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-10" />)}</div>
+        ) : !signedIn ? (
+          <EmptyState title="Sign in to view transcripts" body="Transcripts are only shown to signed-in users. Private uploads and owner captions stay visible only to their owner.">
+            <Button asChild size="sm" variant="secondary" data-testid="transcript-signin">
+              <Link href={`/signin?next=${encodeURIComponent(`/videos/${video.youtubeId}`)}`}>Sign in</Link>
+            </Button>
+          </EmptyState>
         ) : r.error ? (
           <ErrorState error={r.error} onRetry={() => r.refetch()} />
         ) : !data ? (

@@ -11,11 +11,20 @@
 import type { CoverageGroup, CoverageStatus } from "@/server/db";
 import { bestThumb, parseIsoDuration, THUMBNAIL_VARIANTS, type YtChannel, type YtThumbnails, type YtVideo } from "./schemas";
 
+/** Where a thumbnail variant came from (plan Phase 2: URL, width, height, source). */
+export type ThumbSource = "youtube-data-api" | "fixture";
+
 export interface ThumbVariant {
   variant: string;
   url: string;
   width: number | null;
   height: number | null;
+  source: ThumbSource;
+}
+
+export interface NormalizeOptions {
+  /** Provenance recorded on each thumbnail variant (default: the YouTube Data API). */
+  source?: ThumbSource;
 }
 
 export interface GroupCoverage {
@@ -25,12 +34,12 @@ export interface GroupCoverage {
   details?: Record<string, unknown>;
 }
 
-export function thumbnailVariants(t?: YtThumbnails): ThumbVariant[] {
+export function thumbnailVariants(t?: YtThumbnails, source: ThumbSource = "youtube-data-api"): ThumbVariant[] {
   if (!t) return [];
   const out: ThumbVariant[] = [];
   for (const variant of THUMBNAIL_VARIANTS) {
     const v = t[variant];
-    if (v?.url) out.push({ variant, url: v.url, width: v.width ?? null, height: v.height ?? null });
+    if (v?.url) out.push({ variant, url: v.url, width: v.width ?? null, height: v.height ?? null, source });
   }
   return out;
 }
@@ -56,14 +65,14 @@ const bool = (s?: string) => (s === "true" ? true : s === "false" ? false : null
 
 // ── Channels ───────────────────────────────────────────────────────────────
 
-export function normalizeChannel(c: YtChannel) {
+export function normalizeChannel(c: YtChannel, opts: NormalizeOptions = {}) {
   const data: Record<string, unknown> = { youtubeId: c.id, etag: c.etag ?? null };
   const coverage: GroupCoverage[] = [{ group: "IDENTITY", status: "PRESENT", details: { url: `https://www.youtube.com/channel/${c.id}` } }];
   const sn = c.snippet;
   const branding = c.brandingSettings?.channel;
 
   if (sn) {
-    const thumbs = thumbnailVariants(sn.thumbnails);
+    const thumbs = thumbnailVariants(sn.thumbnails, opts.source);
     Object.assign(data, {
       title: sn.title,
       description: sn.description ?? "",
@@ -139,14 +148,14 @@ export function normalizeChannel(c: YtChannel) {
 
 // ── Videos ─────────────────────────────────────────────────────────────────
 
-export function normalizeVideo(v: YtVideo) {
+export function normalizeVideo(v: YtVideo, opts: NormalizeOptions = {}) {
   const data: Record<string, unknown> = { youtubeId: v.id, etag: v.etag ?? null };
   const coverage: GroupCoverage[] = [{ group: "IDENTITY", status: "PRESENT", details: { url: `https://www.youtube.com/watch?v=${v.id}` } }];
   const sn = v.snippet;
   const cd = v.contentDetails;
 
   if (sn) {
-    const thumbs = thumbnailVariants(sn.thumbnails);
+    const thumbs = thumbnailVariants(sn.thumbnails, opts.source);
     Object.assign(data, {
       title: sn.title,
       description: sn.description ?? "",
