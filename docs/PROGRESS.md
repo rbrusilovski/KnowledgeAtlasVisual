@@ -6,6 +6,37 @@ conflict). Compliance: `docs/COMPLIANCE_DECISIONS.md`. Decisions: `docs/DECISION
 
 ---
 
+## Round 3 — audit implementation plan + deferred findings (2026-11-09)
+
+Inputs: `Atlas Audit1 Implementation Plan` (phases 0–6, wins on conflict) and `docs/DEFERRED_AUDIT_FINDINGS.md`
+(D1–D13). Built on the round-2 branch `feat/approval-coverage-compliance`.
+
+### Plan phase verification
+
+| Plan phase | Verdict before this round | Work this round |
+|---|---|---|
+| 0 Compliance gates + transcript security | PRESENT (round 2): `YOUTUBE_LIVE_COLLECTION_ENABLED`, `…CROSS_OWNER_AGGREGATION_APPROVED`, `…DERIVED_METRICS_AMENDMENT_ACCEPTED` gate collection, cross-owner edges, centroids and derived data; transcript route `auth`-scoped; multi-record transcripts; IDOR tests | none needed |
+| 1 Expansion proposals + approval UI | PRESENT: `ExpansionProposal`, producer + service + worker enforcement, review dialog | `/data?proposal=` deep link |
+| 2 Metadata, coverage, provenance | PARTIALLY_PRESENT: thumbnails/statistics/coverage done; `ChannelNiche` had no evidence; topic evidence lacked end timestamps | classification provenance (D9), topic `startSec`/`endSec` + confidence |
+| 3 Queues, dedup, backfill | PRESENT: concurrency 3/5/2/4/1 match; deterministic `-`-separated job IDs + Redis locks; checkpointed `UploadHistory` | none needed |
+| 4 Retention + compliance lifecycle | PRESENT: retention classes, deadline-only deletion, approval-gated refresh, revocation purge | retention-deadline alerts (D12) |
+| 5 Claude tools | NOT_PRESENT | `services/agent` (13 tools), DB-enforced read-only scope, agent tokens, `pnpm mcp`, no approval path (D7, D13) |
+| 6 Ops hardening | PARTIALLY_PRESENT: scripts existed unguarded; SSE heartbeat 25 s + `Last-Event-ID` replay verified | prod compose (D1), encrypted backups + restore tests (D2), reset guard (D3), model-tracked reindex (D4), graph verify + jobs recover (D5), alerts (D6, D12) |
+
+Also: relationship evaluation (D8, numbers in DECISIONS.md), header review (D10), "My transcripts" search (D11).
+
+Verification (all executed this round): `pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm test` ✅ · `pnpm test:integration` ✅
+(see final counts below) · backup → restore-test round trip against `atlas_test` ✅ · `db:reset` refusals ✅ ·
+`graph:verify`, `jobs:recover`, `embeddings:reindex` against `atlas_test` ✅ · `graph:evaluate` on the e2e set and a
+throwaway clone of the dev DB ✅. The dev database itself is still **not** migrated (3 additive migrations pending:
+classification provenance, agent tokens, embedding model) — run `pnpm db:migrate` when ready.
+
+Known limitations: nonce-based CSP not adopted (accepted risk); MCP SDK negotiates protocol `2025-11-25` (the prompt
+cites `2026-07-28`); relationship thresholds unchanged pending a larger labelled set; backups need an operator-provided
+off-host upload command and schedule.
+
+---
+
 ## Round 2 — collection, approval, coverage, compliance (started 2026-11-09)
 
 ### Gap audit (verified in source, 2026-11-09)

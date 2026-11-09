@@ -21,6 +21,7 @@
     "yt:probe": "tsx scripts/yt-probe.ts",
     "graph:rebuild": "tsx scripts/graph-rebuild.ts",
     "graph:verify": "tsx scripts/graph-verify.ts",
+    "graph:evaluate": "tsx scripts/graph-evaluate.ts",
     "jobs:recover": "tsx scripts/jobs-recover.ts",
     "embeddings:reindex": "tsx scripts/embeddings-reindex.ts",
     "mcp": "tsx scripts/mcp-server.ts",

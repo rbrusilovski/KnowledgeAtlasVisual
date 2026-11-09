@@ -13,6 +13,7 @@ import { Highlight } from "@/components/ui/highlight";
 import { apiFetch } from "@/lib/api";
 import { fmtCompact, fmtRelative, fmtTimestamp } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { useMe } from "@/lib/hooks";
 import type { SearchHit, SearchMode, SearchType } from "@/shared/contracts/search";
 
 const TABS: { key: "all" | SearchType; label: string; icon: typeof Tv }[] = [
@@ -31,6 +32,8 @@ export function SearchPage() {
   const q = sp.get("q") ?? "";
   const type = (sp.get("type") ?? "all") as "all" | SearchType;
   const mode = (sp.get("mode") ?? "hybrid") as SearchMode;
+  const me = useMe();
+  const mine = type === "transcript" && sp.get("mine") === "1" && Boolean(me.data);
   const set = (patch: Record<string, string | null>) => {
     const u = new URLSearchParams(sp.toString());
     for (const [k, v] of Object.entries(patch)) {
@@ -41,10 +44,10 @@ export function SearchPage() {
   };
 
   const r = useInfiniteQuery({
-    queryKey: ["search-page", q, type, mode],
+    queryKey: ["search-page", q, type, mode, mine],
     enabled: q.trim().length > 0,
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => apiFetch<SearchHit[]>("/api/search", { query: { q, mode, types: type === "all" ? undefined : [type], limit: 20, cursor: pageParam } }),
+    queryFn: ({ pageParam }) => apiFetch<SearchHit[]>("/api/search", { query: { q, mode, types: type === "all" ? undefined : [type], transcripts: mine ? "mine" : undefined, limit: 20, cursor: pageParam } }),
     getNextPageParam: (last) => (last.meta?.nextCursor as string | null) ?? undefined,
   });
   const hits = r.data?.pages.flatMap((p) => p.data) ?? [];
@@ -60,6 +63,12 @@ export function SearchPage() {
             {meta?.counts && t.key !== "all" && meta.counts[t.key] !== undefined ? <span className="num text-xs text-text-3">{meta.counts[t.key]}</span> : null}
           </button>
         ))}
+        {type === "transcript" && me.data ? (
+          <label className="ml-2 flex items-center gap-1.5 pb-1 text-xs text-text-2">
+            <input type="checkbox" checked={mine} onChange={(e) => set({ mine: e.target.checked ? "1" : null })} className="accent-accent-500" data-testid="search-mine" />
+            Only my transcripts
+          </label>
+        ) : null}
         <div className="ml-auto flex items-center gap-1 pb-1" role="radiogroup" aria-label="Search mode">
           {MODES.map((m) => (
             <button key={m} role="radio" aria-checked={mode === m} onClick={() => set({ mode: m === "hybrid" ? null : m })} className={cn("h-7 rounded-control px-2 text-xs capitalize", mode === m ? "bg-bg-3 text-text-1" : "text-text-3 hover:text-text-1")}>

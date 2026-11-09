@@ -144,6 +144,27 @@ describe("intelligence + graph pipeline (fixture mode)", () => {
     const all = await Promise.all(channels.map((c) => relatedCreators(c)));
     const withReasons = all.flat().filter((r) => r.reasons.length);
     for (const r of withReasons) expect(r.reasons[0]!.text.length).toBeGreaterThan(5);
+    for (const r of withReasons) for (const reason of r.reasons) expect(reason.label).toBe(reason.kind === "FEATURED" ? "FACT" : "INFERRED");
+  });
+
+  it("evaluates relationship + classification quality against fixture labels, with stability across runs (D8)", async () => {
+    const { evaluateQuality } = await import("@/server/services/graph");
+    const first = await evaluateQuality();
+    expect(first.goldSource).toBe("fixture-labels");
+    expect(first.labelledChannels).toBe(channels.length);
+    expect(first.kinds.map((k) => k.kind)).toEqual(["SIMILAR", "CO_TOPIC", "CO_DISCOVERED", "FEATURED"]);
+    for (const k of first.kinds) {
+      for (const v of [k.precision, k.recall, k.precisionParent, k.evidenceRate]) {
+        if (v === null) continue;
+        expect(v).toBeGreaterThanOrEqual(0);
+        expect(v).toBeLessThanOrEqual(1);
+      }
+    }
+    expect(first.classification.evaluated).toBe(channels.length);
+    expect(first.classification.top1).toBeGreaterThan(0.5);
+    expect(first.similarSweep?.length).toBe(9);
+    const second = await evaluateQuality();
+    for (const k of second.kinds) expect(k.stability).toBe(1);
   });
 
   it("finds a path between two channels through the taxonomy/topics", async () => {

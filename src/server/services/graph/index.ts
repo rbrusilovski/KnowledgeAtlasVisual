@@ -4,3 +4,4 @@ export { getSubgraph, getNeighbors, getDelta, findPath, currentVersion } from ".
 export { relatedCreators } from "./related";
 export { EDGE_PROVENANCE, edgeProvenance, type EdgeBasis, type EdgeProvenance } from "./provenance";
 export { verifyGraph, type GraphVerifyReport } from "./verify";
+export { evaluateQuality, type QualityReport, type KindQuality } from "./evaluate";

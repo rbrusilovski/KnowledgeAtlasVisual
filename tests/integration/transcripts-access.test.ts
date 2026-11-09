@@ -60,6 +60,20 @@ describe("private transcripts", () => {
     expect((await detail(bob.cookie)).hasTranscript).toBe(false);
   });
 
+  it("the 'My transcripts' scope returns only the viewer's own private transcripts, never cached (D10, D11)", async () => {
+    const mine = (cookie?: string) => searchRoute.GET(req(`/api/search?q=${encodeURIComponent("zanzibar quokka")}&mode=keyword&transcripts=mine`, { cookie }), ctx({}));
+    const a = await mine(alice.cookie);
+    expect(a.headers.get("cache-control")).toBe("private, no-store");
+    const hits = (await body(a)).data as { type: string }[];
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.type).toBe("transcript");
+    expect((await body(await mine(bob.cookie))).data).toHaveLength(0);
+    expect((await mine()).status).toBe(401);
+    // The shared corpus never appears in the "mine" scope.
+    const corpus = (await body(await searchRoute.GET(req(`/api/search?q=welcome&mode=keyword&transcripts=mine`, { cookie: bob.cookie }), ctx({})))).data as unknown[];
+    expect(corpus).toHaveLength(0);
+  });
+
   it("another user's upload for the same video/language does not overwrite it", async () => {
     const r = await transcriptRoute.POST(req(`/api/videos/${video.youtubeId}/transcript`, { method: "POST", cookie: bob.cookie, body: { text: "bob's own words about the video", filename: "b.txt" } }), ctx({ id: video.youtubeId }));
     expect(r.status).toBe(201);

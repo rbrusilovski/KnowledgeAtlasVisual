@@ -6,6 +6,24 @@ the YouTube subsystem lives in `docs/PROGRESS.md`.
 
 Format: severity · finding · impact · affected files · recommendation.
 
+## Resolution status (audit implementation round, 2026-11-09)
+
+| # | Status | Where |
+|---|---|---|
+| D1 | ✅ Resolved | `docker-compose.yml` (dev, 127.0.0.1) · `docker-compose.prod.yml` · `docs/OPERATIONS.md` §1–3 |
+| D2 | ✅ Resolved | `pnpm db:backup` / `db:restore-test` / `db:preflight`, `scripts/lib/pg-tools.ts`, OPERATIONS §4–5 |
+| D3 | ✅ Resolved | `scripts/lib/reset-guard.ts` (unit-tested) |
+| D4 | ✅ Resolved | `embeddingModel` columns, `embeddingSpace()`/`semanticAvailable()`, resumable `pnpm embeddings:reindex` |
+| D5 | ✅ Resolved | `pnpm graph:verify [--repair]`, `pnpm jobs:recover [--apply]` |
+| D6 | ✅ Resolved | `services/alerts` → /admin + structured `alert` logs |
+| D7 | ✅ Resolved | `services/agent`, `/api/agent/tools/*`, agent tokens (Settings), `pnpm mcp` |
+| D8 | ✅ Resolved (measured, thresholds unchanged) | `pnpm graph:evaluate`, FACT/INFERRED edge provenance — results in DECISIONS.md |
+| D9 | ✅ Resolved | `ChannelNiche.classifier` + `evidence` |
+| D10 | ✅ Reviewed + hardened | `next.config.ts`, `withRoute` no-store; `'unsafe-inline'` scripts kept (accepted risk, DECISIONS.md) |
+| D11 | ✅ Resolved | `/api/search?transcripts=mine`, Search page toggle |
+| D12 | ✅ Resolved | alerts: quota, retention deadlines, stale graph |
+| D13 | ✅ Resolved | `e2e/agent.spec.ts` |
+
 | # | Sev | Finding | Impact | Files | Recommendation |
 |---|---|---|---|---|---|
 | D1 | High | Compose publishes Postgres (5432) and Redis (6379) on `0.0.0.0` with fixed `atlas/atlas` credentials; Redis has no auth; the `prod` profile reuses the same credentials via `DATABASE_URL` literals. | Anyone on the network can read/write the DB and queues on a host running the prod profile. | `docker-compose.yml` | Bind dev ports to `127.0.0.1`; add `docker-compose.prod.yml` with an internal network, no published DB/Redis ports, `${POSTGRES_PASSWORD:?}` required vars, Redis `requirepass`. Document deploy + rollback. |

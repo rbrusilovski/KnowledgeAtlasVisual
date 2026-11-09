@@ -10,6 +10,8 @@ export const SearchQuery = z.object({
   mode: z.enum(["hybrid", "keyword", "semantic"]).default("hybrid"),
   types: csv(z.enum(SEARCH_TYPES)),
   channelId: z.string().max(100).optional(),
+  /** "mine" limits transcript hits to the signed-in user's own private transcripts (D11). */
+  transcripts: z.enum(["all", "mine"]).default("all"),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   cursor: Cursor,
 });
