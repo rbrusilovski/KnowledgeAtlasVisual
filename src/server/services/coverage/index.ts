@@ -292,6 +292,8 @@ export async function inspectChannel(channelId: string) {
       reportedVideoCount: c.videoCount,
       remainingEstimate: h.totalResults !== null ? Math.max(0, h.totalResults - h.itemsSeen) : c.videoCount !== null ? Math.max(0, c.videoCount - h.itemsSeen) : null,
       hasMore: MORE_HISTORY.has(h.state),
+      /** Completed scan saw fewer items than YouTube reports → possible gap (re-scan via an approved backfill). */
+      gap: h.state === "COMPLETE_TO_SOURCE_LIMIT" && h.totalResults !== null && h.itemsSeen < h.totalResults ? h.totalResults - h.itemsSeen : 0,
       lastPageAt: h.lastPageAt?.toISOString() ?? null,
       completedAt: h.completedAt?.toISOString() ?? null,
       lastError: h.lastError,

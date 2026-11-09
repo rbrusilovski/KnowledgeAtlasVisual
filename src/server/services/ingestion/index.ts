@@ -433,6 +433,7 @@ export async function backfillHistory(input: BackfillInput, ctl: JobControl) {
           channel = await loadChannelForCollection(input.youtubeId);
           if (!channel.uploadsPlaylistId) throw new AppError("NOT_FOUND", "Channel has no uploads playlist");
         }
+        await prepareRescan(channel.id, a.proposal.id);
         const before = await progressOf(a.proposal.id, "backfill");
         const pagesLeft = a.scope.maxPages - before.pages;
         const out = await collectHistory({ ...channel, uploadsPlaylistId: channel.uploadsPlaylistId }, a, {
@@ -467,6 +468,21 @@ export async function backfillHistory(input: BackfillInput, ctl: JobControl) {
   });
   if (!r) throw new Error("Channel is being collected by another job; will retry");
   return r;
+}
+
+/**
+ * Uploads-playlist page tokens are positional, so uploads deleted during a long scan can shift unseen items across
+ * the checkpoint. When a completed history saw fewer items than YouTube reports, an approved backfill re-scans from
+ * the newest end (already-stored videos are cheap no-ops; new finds are collected).
+ */
+export async function prepareRescan(channelId: string, proposalId: string) {
+  const h = await db.uploadHistory.findUnique({ where: { channelId } });
+  if (!h || h.state !== "COMPLETE_TO_SOURCE_LIMIT" || h.lastProposalId === proposalId || h.totalResults === null || h.itemsSeen >= h.totalResults) return false;
+  await db.uploadHistory.update({
+    where: { channelId },
+    data: { state: "BACKFILL_IN_PROGRESS", nextPageToken: null, pageOffset: 0, itemsSeen: 0, completedAt: null, lastError: `re-scan: previous scan saw ${h.itemsSeen} of ${h.totalResults} reported items` },
+  });
+  return true;
 }
 
 // ── Incremental sync (SYNC_UPLOADS) ────────────────────────────────────────

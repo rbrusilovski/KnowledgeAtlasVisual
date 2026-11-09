@@ -104,6 +104,21 @@ export function DiscoverPage() {
     },
   });
 
+  /** Bounded discovery under approval: the proposal states searches used and the maximum channels/videos added. */
+  const proposeDiscovery = async () => {
+    try {
+      const p = niche && !q.trim()
+        ? await api.post<ProposalDTO>(`/api/discover/niche/${niche.slug}/propose`, { regionCode: region || undefined })
+        : await api.post<ProposalDTO>("/api/expansions", {
+            scope: { kind: "DISCOVER_CHANNELS", queries: [q.trim()], nicheId: niche?.id, regionCode: region || undefined, relevanceLanguage: language || undefined, maxCandidatesPerQuery: 15, maxChannelsToAdd: 5, maxVideosPerChannel: 100, includeTranscripts: true },
+            reason: `Requested by you: find up to 5 new channels for “${q.trim()}”.`,
+          });
+      reviewProposal(p);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not create the proposal");
+    }
+  };
+
   /** One ADD_CHANNELS proposal for the selection; the review dialog shows scope + cost before anything runs. */
   const addChannels = async (ids: string[]) => {
     try {
@@ -191,6 +206,11 @@ export function DiscoverPage() {
         {niche ? (
           <Button type="button" variant="secondary" className="h-9" onClick={() => run.mutate({ kind: "niche" })} disabled={run.isPending}>
             <Sparkles /> Run {niche.name} queries
+          </Button>
+        ) : null}
+        {niche || q.trim().length >= 2 ? (
+          <Button type="button" variant="outline" className="h-9" onClick={() => void proposeDiscovery()} data-testid="discover-propose" title="Searches and adds new channels automatically — only after you approve the bounded proposal">
+            <Plus /> Propose auto-add
           </Button>
         ) : null}
       </form>

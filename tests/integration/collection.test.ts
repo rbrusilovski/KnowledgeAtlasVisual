@@ -385,3 +385,54 @@ describe("compliance lifecycle", () => {
     expect(await ingestion.computeTier(ch.id)).toBe("HOT");
   });
 });
+
+describe("drift re-scan + proposal routes", () => {
+  it("a complete history is not re-backfillable unless YouTube reports items the scan never saw", async () => {
+    await ingest();
+    await expect(createProposal({ scope: { kind: "BACKFILL_HISTORY", channelYoutubeId: FIXTURE_CHANNEL, maxPages: 5, maxVideos: 500, includeTranscripts: false }, reason: "t" }, actorFor(owner))).rejects.toThrow(/already complete/);
+    // Simulate positional-token drift: two uploads were skipped by the earlier scan.
+    const missed = await db.video.findMany({ orderBy: { publishedAt: "asc" }, take: 2, select: { id: true, youtubeId: true } });
+    await db.video.deleteMany({ where: { id: { in: missed.map((m) => m.id) } } });
+    const h = await db.uploadHistory.findFirstOrThrow();
+    await db.uploadHistory.update({ where: { channelId: h.channelId }, data: { itemsSeen: h.itemsSeen - 2, totalResults: h.itemsSeen } });
+    const cov = await inspectChannel(h.channelId);
+    expect(cov.history!.gap).toBe(2);
+    const p = await approved({ kind: "BACKFILL_HISTORY", channelYoutubeId: FIXTURE_CHANNEL, maxPages: 5, maxVideos: 500, includeTranscripts: false }, owner);
+    const out = await ingestion.backfillHistory({ auth: authOf(p), lane: "background", youtubeId: FIXTURE_CHANNEL, slice: 0 }, ctlFor(p.jobIds[0]!));
+    expect(out.state).toBe("COMPLETE_TO_SOURCE_LIMIT");
+    expect(await db.video.count({ where: { youtubeId: { in: missed.map((m) => m.youtubeId) } } })).toBe(2);
+    const after = await db.uploadHistory.findFirstOrThrow();
+    expect(after.itemsSeen).toBe(after.totalResults);
+  });
+
+  it("propose routes create PENDING proposals and spend no quota", async () => {
+    const { signUp, req, ctx } = await import("./helpers");
+    const { usage } = await import("@/server/services/quota");
+    const { seedTaxonomy } = await import("@/server/services/classification");
+    const discoverRoute = await import("@/app/api/discover/niche/[nicheId]/propose/route");
+    const refreshRoute = await import("@/app/api/channels/[id]/refresh/route");
+    const syncRoute = await import("@/app/api/channels/[id]/sync/route");
+    await seedTaxonomy();
+    const u = await signUp("router@atlas.test");
+    await ingest(10);
+    const before = await usage();
+    const d = await discoverRoute.POST(req("/api/discover/niche/baking/propose", { method: "POST", cookie: u.cookie, body: { maxChannelsToAdd: 3 } }), ctx({ nicheId: "baking" }));
+    expect(d.status).toBe(201);
+    const dp = (await d.json()).data;
+    expect(dp).toMatchObject({ kind: "DISCOVER_CHANNELS", status: "PENDING", canDecide: true, estimate: { channels: 3 } });
+    expect(dp.estimate.searchCalls).toBeGreaterThan(0);
+    const r = await refreshRoute.POST(req(`/api/channels/${FIXTURE_CHANNEL}/refresh`, { method: "POST", cookie: u.cookie, body: { fields: "all" } }), ctx({ id: FIXTURE_CHANNEL }));
+    expect((await r.json()).data).toMatchObject({ kind: "REFRESH_METADATA", status: "PENDING" });
+    const s = await syncRoute.POST(req(`/api/channels/${FIXTURE_CHANNEL}/sync`, { method: "POST", cookie: u.cookie, body: { full: true } }), ctx({ id: FIXTURE_CHANNEL }));
+    expect((await s.json()).data).toMatchObject({ kind: "BACKFILL_HISTORY", status: "PENDING" });
+    const after = await usage();
+    expect(after.buckets).toEqual(before.buckets); // proposing never calls YouTube
+    // Another user cannot approve them.
+    const other = await signUp("intruder@atlas.test");
+    const approveRoute = await import("@/app/api/expansions/[id]/approve/route");
+    const x = await approveRoute.POST(req(`/api/expansions/${dp.id}/approve`, { method: "POST", cookie: other.cookie, body: { scopeHash: dp.scopeHash } }), ctx({ id: dp.id }));
+    expect(x.status).toBe(404);
+    const anon = await approveRoute.POST(req(`/api/expansions/${dp.id}/approve`, { method: "POST", body: { scopeHash: dp.scopeHash } }), ctx({ id: dp.id }));
+    expect(anon.status).toBe(401);
+  });
+});

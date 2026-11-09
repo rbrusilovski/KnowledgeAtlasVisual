@@ -6,7 +6,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ExternalLink, History, Network, Pencil, RefreshCw, Search, X } from "lucide-react";
+import { Database, ExternalLink, History, Network, Pencil, RefreshCw, Search, X } from "lucide-react";
 import { Page } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,6 +84,13 @@ export function ChannelPage({ id }: { id: string }) {
       toast.error(e instanceof Error ? e.message : "Sync failed");
     }
   };
+  const refresh = async () => {
+    try {
+      reviewProposal(await api.post<ProposalDTO>(`/api/channels/${c.youtubeId}/refresh`, { fields: "all" }));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Sync failed");
+    }
+  };
   return (
     <Page wide>
       <header className="flex flex-wrap items-start gap-5">
@@ -118,8 +125,11 @@ export function ChannelPage({ id }: { id: string }) {
           </Button>
           {me.data ? (
             <>
-              <Button variant="ghost" size="sm" onClick={() => void sync(false)}>
+              <Button variant="ghost" size="sm" onClick={() => void sync(false)} title="Check for new uploads (needs approval)">
                 <RefreshCw /> Sync
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => void refresh()} title="Re-fetch all stored metadata (needs approval)" data-testid="channel-refresh">
+                <Database /> Refresh metadata
               </Button>
               {c.hasMoreHistory ? (
                 <Button variant="ghost" size="sm" onClick={() => void sync(true)}>
@@ -390,7 +400,7 @@ function NicheOverride({ channel, onClose }: { channel: ChannelDetail; onClose: 
 interface ChannelCoverage {
   complete: boolean;
   groups: { group: string; status: string; reason: string | null; lastSuccessAt: string | null }[];
-  history: { state: string; itemsSeen: number; videosCollected: number; unavailable: number; pagesScanned: number; oldestPublishedAt: string | null; newestPublishedAt: string | null; reportedVideoCount: number | null; remainingEstimate: number | null; hasMore: boolean; lastError: string | null } | null;
+  history: { state: string; itemsSeen: number; videosCollected: number; unavailable: number; pagesScanned: number; oldestPublishedAt: string | null; newestPublishedAt: string | null; reportedVideoCount: number | null; remainingEstimate: number | null; hasMore: boolean; gap: number; lastError: string | null } | null;
   videos: { total: number; complete: number };
   proposals: { id: string; kind: string; status: string; title: string }[];
 }
@@ -428,6 +438,14 @@ function HistoryPanel({ id }: { id: string }) {
               {h.remainingEstimate ? ` · ~${h.remainingEstimate.toLocaleString()} remaining` : ""}
             </div>
             {h.lastError ? <div className="mt-1 text-xs text-warning">{h.lastError}</div> : null}
+            {h.gap > 0 ? (
+              <div className="mt-2 flex items-center gap-2 text-xs text-warning">
+                {h.gap} reported upload(s) were not seen in the last scan.
+                <Button size="sm" variant="outline" className="h-6" onClick={async () => { try { reviewProposal(await api.post<ProposalDTO>(`/api/channels/${id}/sync`, { full: true })); } catch (e) { toast.error(e instanceof Error ? e.message : "Could not propose a re-scan"); } }}>
+                  Propose re-scan
+                </Button>
+              </div>
+            ) : null}
           </>
         ) : (
           <div className="mt-1 text-text-2">Not collected yet</div>

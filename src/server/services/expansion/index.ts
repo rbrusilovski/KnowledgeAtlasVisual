@@ -193,9 +193,12 @@ async function validateTargets(scope: ExpansionScope) {
       return;
     }
     case "BACKFILL_HISTORY": {
-      const c = await db.channel.findUnique({ where: { youtubeId: scope.channelYoutubeId }, select: { history: { select: { state: true, nextPageToken: true } } } });
+      const c = await db.channel.findUnique({ where: { youtubeId: scope.channelYoutubeId }, select: { history: { select: { state: true, nextPageToken: true, itemsSeen: true, totalResults: true } } } });
       if (!c) throw notFound("Channel");
-      if (c.history && !c.history.nextPageToken && ["COMPLETE_TO_SOURCE_LIMIT", "SOURCE_UNAVAILABLE"].includes(c.history.state)) {
+      const h = c.history;
+      if (h?.state === "SOURCE_UNAVAILABLE") throw new AppError("CONFLICT", "This channel has no uploads playlist");
+      // Complete history is only re-scannable when YouTube reported more items than the scan saw (positional-token drift).
+      if (h && !h.nextPageToken && h.state === "COMPLETE_TO_SOURCE_LIMIT" && !(h.totalResults !== null && h.itemsSeen < h.totalResults)) {
         throw new AppError("CONFLICT", "This channel's upload history is already complete");
       }
       return;

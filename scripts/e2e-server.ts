@@ -14,13 +14,14 @@ const DB = process.env.E2E_DATABASE_URL ?? "postgresql://atlas:atlas@localhost:5
 const env: NodeJS.ProcessEnv = {
   ...process.env,
   DATABASE_URL: DB,
-  REDIS_PREFIX: "atlas-e2e",
+  // Overridable so parallel worktrees can run e2e side by side (E2E_PORT / E2E_DATABASE_URL / E2E_REDIS_PREFIX).
+  REDIS_PREFIX: process.env.E2E_REDIS_PREFIX ?? "atlas-e2e",
   YOUTUBE_MODE: "fixture",
   EMBEDDING_PROVIDER: "hash",
   BETTER_AUTH_URL: `http://localhost:${PORT}`,
   NEXT_PUBLIC_APP_URL: `http://localhost:${PORT}`,
   NEXT_DIST_DIR: ".next-e2e",
-  BULL_BOARD_PORT: "3111",
+  BULL_BOARD_PORT: process.env.E2E_BULL_BOARD_PORT ?? "3111",
   WORKER_SCHEDULERS: "false",
   RATE_LIMIT_ANON_PER_MIN: "5000",
   RATE_LIMIT_USER_PER_MIN: "5000",

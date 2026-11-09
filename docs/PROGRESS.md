@@ -75,14 +75,19 @@ Verification (2026-11-09, all executed): `pnpm typecheck` ✅ · `pnpm lint` ✅
 `pnpm build` ✅ · client-bundle secret grep clean ✅ · migration applied to a clone of the dev DB with no data loss and
 no Prisma drift ✅ · worker boot + SIGTERM graceful shutdown ✅. The dev database itself has **not** been migrated.
 
+Follow-up round (same day): discovery proposals from the Discover page (query or subniche queries), quota-vs-estimate
+check in the review dialog, "Refresh metadata" proposals per channel, drift detection + approved re-scan, live-client
+tests for all requested parts and partial responses, configurable e2e/integration isolation for parallel worktrees.
+Verified: typecheck ✅ · lint ✅ · unit 110/110 ✅ · integration 66/66 ✅ (isolated DB/prefix — another worktree was
+running tests on the shared `atlas_test`) · e2e 12/12 ✅ (isolated port 3200, production build).
+
 Remaining YouTube-specific gaps:
 - Live client never exercised against the real API in this session (no key; live collection is gated off anyway).
 - Owner captions fetch one preferred track per video (other languages not auto-fetched).
-- Uploads-playlist page tokens are positional; deletions during a long backfill can shift items (drift is visible
-  via `itemsSeen` vs `totalResults`).
+- Uploads-playlist page tokens are positional; deletions during a long backfill can shift items. Now detected
+  (completed scan saw fewer items than YouTube reports → `gap` on the channel) and repairable by an approved re-scan.
 - Discovery previews on `/discover` still spend search quota without a proposal (they add nothing to the corpus;
-  cost confirmation is kept); `DISCOVER_CHANNELS` proposals are available via `/api/expansions` but have no
-  dedicated UI form yet.
+  cost confirmation is kept). Auto-add discovery runs as a bounded `DISCOVER_CHANNELS` proposal ("Propose auto-add").
 - `localizations` are stored but not surfaced in the UI.
 
 Policy-sensitive (blocked on the owner, infrastructure built): enabling live collection; cross-owner aggregation;

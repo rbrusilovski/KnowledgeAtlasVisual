@@ -6,11 +6,14 @@ export const fixtureIndex = JSON.parse(readFileSync("fixtures/youtube/index.json
 export const INGESTED = fixtureIndex.channels.slice(0, 14);
 export const NOT_INGESTED = fixtureIndex.channels.slice(14);
 
+/** Origin of the isolated e2e server (E2E_PORT, default 3100). */
+export const E2E_ORIGIN = `http://localhost:${process.env.E2E_PORT ?? 3100}`;
+
 let n = 0;
 export async function signUp(page: Page) {
   const email = `e2e-${Date.now()}-${n++}@atlas.test`;
-  const base = new URL(page.context().pages()[0]?.url() || "http://localhost:3100").origin;
-  const origin = base.startsWith("http") && !base.includes("about:") ? base : "http://localhost:3100";
+  const base = new URL(page.context().pages()[0]?.url() || E2E_ORIGIN).origin;
+  const origin = base.startsWith("http") && !base.includes("about:") ? base : E2E_ORIGIN;
   const res = await page.request.post("/api/auth/sign-up/email", { data: { email, password: "e2e-password-123", name: "E2E" }, headers: { origin } });
   expect(res.ok(), `sign-up failed: ${res.status()} ${await res.text()}`).toBeTruthy();
   return email;

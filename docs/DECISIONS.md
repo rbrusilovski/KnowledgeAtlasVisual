@@ -76,3 +76,10 @@ Format: decision — reason — alternative considered.
 - **Owner captions: one preferred track per video** (manual > ASR, English first) to bound the 250-unit cost; skipped entirely when `contentDetails.caption = false`.
 - **Fixture responses are enriched deterministically at read time** (thumbnail dims, standard/maxres for some videos, ~12 % hidden likes, ~6 % disabled comments, status/topic parts) instead of regenerating the committed 7 MB dataset; `FIXTURE_UNAVAILABLE` simulates playlist items `videos.list` won't return.
 - **`GET /api/jobs/:id` now requires the requesting user (or admin)** — it exposed ingestion results to anyone with a job ID.
+- **Drift repair = approved re-scan from the newest end** when a completed history saw fewer items than
+  `pageInfo.totalResults` — re-reads are cheap (etag no-ops) and only new finds are written; alternative: trusting the
+  first scan (silently incomplete histories).
+- **Quota vs estimate is a warning, not a block** — exceeding today's remaining quota just pauses jobs until the
+  Pacific-midnight reset; SYSTEM proposals are compared with the background share.
+- **ESLint ignores `.claude/**`** — nested agent worktrees live there and their build output was being linted.
+

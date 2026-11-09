@@ -7,6 +7,7 @@ import { ShieldCheck, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge, Dialog, DialogContent } from "@/components/ui/misc";
 import { api, ApiError } from "@/lib/api";
+import { useQuota } from "@/lib/hooks";
 import type { ProposalDTO } from "@/shared/contracts/expansion";
 
 const EVENT = "atlas:review-proposal";
@@ -70,6 +71,29 @@ export function EstimateLine({ p }: { p: ProposalDTO }) {
   );
 }
 
+/**
+ * Compares the estimate with today's remaining quota. Exceeding it is allowed — jobs pause at the Pacific-midnight
+ * reset and resume automatically — but the user should know before approving. Background (SYSTEM) work only gets the
+ * background share of the quota.
+ */
+function QuotaCheck({ p }: { p: ProposalDTO }) {
+  const quota = useQuota();
+  if (!quota.data || p.status !== "PENDING") return null;
+  const general = quota.data.buckets.find((b) => b.bucket === "general");
+  const search = quota.data.buckets.find((b) => b.bucket === "search");
+  const background = p.source === "SYSTEM";
+  const generalLeft = general ? Math.max(0, (background ? general.backgroundCap : general.limit) - general.used) : Infinity;
+  const searchLeft = search ? Math.max(0, (background ? search.backgroundCap : search.limit) - search.used) : Infinity;
+  const over = p.estimate.quotaUnits > generalLeft || p.estimate.searchCalls > searchLeft;
+  return (
+    <p className={`text-xs ${over ? "text-warning" : "text-text-3"}`} data-testid="proposal-quota">
+      {over
+        ? `Exceeds today's remaining ${background ? "background " : ""}quota (${generalLeft.toLocaleString()} units, ${searchLeft} searches). Work pauses at the reset (${new Date(quota.data.resetAt).toLocaleTimeString()}) and resumes automatically.`
+        : `Fits today's remaining ${background ? "background " : ""}quota: ${generalLeft.toLocaleString()} units, ${searchLeft} searches.`}
+    </p>
+  );
+}
+
 function ReviewBody({ p, onDone }: { p: ProposalDTO; onDone: () => void }) {
   const qc = useQueryClient();
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
@@ -99,6 +123,7 @@ function ReviewBody({ p, onDone }: { p: ProposalDTO; onDone: () => void }) {
       {p.coverageGap ? <p className="text-sm text-text-3">Gap: {p.coverageGap}</p> : null}
       <ScopeDetails p={p} />
       <EstimateLine p={p} />
+      <QuotaCheck p={p} />
       {p.uncertainty ? (
         <p className="flex gap-2 rounded-control border border-border bg-bg-2 p-2 text-xs text-text-2">
           <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-warning" />

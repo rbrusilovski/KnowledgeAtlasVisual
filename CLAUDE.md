@@ -12,6 +12,9 @@ Next.js here is v16 — read `node_modules/next/dist/docs/` before using an unfa
 - `pnpm db:migrate` (deploy) · `pnpm db:migrate:dev` · `pnpm db:seed` · `pnpm db:reset`
 - `pnpm typecheck` · `pnpm lint` · `pnpm test` · `pnpm test:integration` · `pnpm e2e` · `pnpm build`
 - `pnpm fixtures:generate` · `pnpm yt:probe <url|@handle>` · `pnpm graph:rebuild [--topics]` · `pnpm embeddings:reindex`
+- Parallel worktrees share Docker services: isolate runs with `TEST_DATABASE_URL=…/atlas_test_<name>`
+  `TEST_REDIS_PREFIX=atlas-test-<name>` (integration) and `E2E_PORT` / `E2E_DATABASE_URL` / `E2E_REDIS_PREFIX` /
+  `E2E_BULL_BOARD_PORT` (e2e), or the runs corrupt each other's state.
 - E2E: `pnpm e2e` boots `scripts/e2e-server.ts` (DB `atlas_e2e`, prefix `atlas-e2e`, port 3100, distDir `.next-e2e`,
   hash embeddings, 14 seeded channels). Specs read node positions through `window.__atlas`.
 

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { signUp, INGESTED, NOT_INGESTED } from "./helpers";
+import { signUp, INGESTED, NOT_INGESTED, E2E_ORIGIN } from "./helpers";
 
 test.describe("pages", () => {
   test("discover search → add channel → shows as in atlas (live)", async ({ page }) => {
@@ -54,7 +54,7 @@ test.describe("pages", () => {
   test("data page: a pending proposal is reviewed and rejected; nothing is collected", async ({ page }) => {
     await signUp(page);
     const target = NOT_INGESTED.find((c) => c.subniche === "devops-cloud") ?? NOT_INGESTED[12]!;
-    const created = await page.request.post("/api/channels", { data: { input: target.id }, headers: { origin: "http://localhost:3100" } });
+    const created = await page.request.post("/api/channels", { data: { input: target.id }, headers: { origin: E2E_ORIGIN } });
     expect(created.status()).toBe(201);
     await page.goto("/data");
     const row = page.getByTestId("proposal-row").filter({ hasText: target.id }).first();
@@ -76,13 +76,13 @@ test.describe("pages", () => {
     const yt = v.nodeId.slice(6);
     await page.goto(`/videos/${yt}`);
     await expect(page.getByTestId("video-coverage")).toContainText("complete");
-    const up = await page.request.post(`/api/videos/${yt}/transcript`, { data: { text: "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nmy private notes", filename: "n.vtt" }, headers: { origin: "http://localhost:3100" } });
+    const up = await page.request.post(`/api/videos/${yt}/transcript`, { data: { text: "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nmy private notes", filename: "n.vtt" }, headers: { origin: E2E_ORIGIN } });
     expect(up.status()).toBe(201);
     await page.reload();
     await expect(page.getByTestId("transcript-private")).toBeVisible();
     // Anonymous visitors don't see it.
     const anon = await page.context().browser()!.newContext();
-    const r = await (await anon.request.get(`http://localhost:3100/api/videos/${yt}/transcript`)).json();
+    const r = await (await anon.request.get(`${E2E_ORIGIN}/api/videos/${yt}/transcript`)).json();
     expect(r.data).toBeNull();
     await anon.close();
   });
