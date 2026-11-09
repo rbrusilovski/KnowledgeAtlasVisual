@@ -27,10 +27,25 @@ Source of truth: `BUILD_SPEC.md`. Phases follow §16.
   ⌘K palette with search-to-focus, live graph deltas, list view, status bar.
 - [x] Phase 8 — Pages: landing, sign-in, discover, channel, video, collections (+detail), search, settings, admin,
   privacy/terms templates, /dev/graph-bench.
-- [ ] Phase 9 — Polish & hardening: README + CI written; e2e specs written (see e2e/); remaining: green e2e run,
-  production build + client-bundle secret grep, final a11y pass.
+- [x] Phase 9 — Polish & hardening: README, GitHub Actions CI, e2e (10/10), production build, client-bundle secret
+  check (no secret values; only Better Auth's isomorphic env-getter references the name), hydration fixes,
+  graph-bench 60 FPS at 5k/19k and 10k/38k (headless Chromium).
 
-Tests: 92 unit, 31 integration passing; 10 Playwright specs.
+## Definition of Done
+- [x] Fresh clone → README steps → working fixture-mode app with the demo dataset.
+- [x] `YOUTUBE_MODE=live` + key uses the live client with no code changes (live client covered by unit tests; not run
+      against the real API here — no key was available).
+- [x] Atlas: zoom, pan, drag+pin (persisted), hover highlight, expand/collapse, clustering, filters, local mode, list
+      view, hover cards, inspector.
+- [x] Search: hybrid/keyword/semantic across types; within-channel; transcript hits deep-link to timestamps.
+- [x] Collections, saved views, layouts persist per user and are isolated (IDOR tests).
+- [x] Background sync on schedule, quota lanes, retries, pause on exhaustion, 30-day compliance (integration tests).
+- [x] Real-time: newly ingested channels appear in an open atlas without reload (e2e).
+- [x] Quota usage visible in the UI; costly actions confirm before spending searches.
+- [x] No secrets in the client bundle.
+- [x] typecheck, lint, test, test:integration, e2e, build all pass.
+
+Tests: 92 unit, 32 integration, 10 Playwright e2e — all passing.
 
 ## Environment notes
 - Node v24.22.2 + pnpm 12.18 at `~/.local/node` (not on default PATH; prefix commands).

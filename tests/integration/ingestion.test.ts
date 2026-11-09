@@ -4,6 +4,8 @@ import { db } from "@/server/db";
 import { getQueue, QUEUES, enqueue } from "@/server/jobs";
 import * as ingestion from "@/server/services/ingestion";
 import { markExhausted } from "@/server/services/quota";
+import { runCompliance } from "@/server/services/compliance";
+import { resetFixtureStore } from "@/server/youtube/fixture";
 import { startWorkers } from "@/worker/processors";
 import { resetDb, flushRedis, drain, teardown, noopCtl, setServed, FIXTURE_CHANNEL } from "./helpers";
 
@@ -99,5 +101,28 @@ describe("ingestion pipeline (fixture mode)", () => {
     const ws = await db.workspace.create({ data: { ownerId: user.id, name: "w", collections: { create: { name: "c" } } }, include: { collections: true } });
     await db.collectionItem.create({ data: { collectionId: ws.collections[0]!.id, nodeId: `channel:${FIXTURE_CHANNEL}` } });
     expect(await ingestion.computeTier(ch.id)).toBe("HOT");
+  });
+
+  it("compliance refreshes stale records and deletes ones the API no longer returns", async () => {
+    await ingestion.ingestChannel({ youtubeId: FIXTURE_CHANNEL, lane: "interactive" }, noopCtl);
+    await drain();
+    const old = new Date(Date.now() - 40 * 86_400_000);
+    const [gone, ...rest] = await db.video.findMany({ orderBy: { publishedAt: "desc" }, take: 6, select: { id: true, youtubeId: true } });
+    await db.channel.updateMany({ data: { lastRefreshedAt: old } });
+    await db.video.updateMany({ where: { id: { in: [gone!.id, ...rest.map((r) => r.id)] } }, data: { lastRefreshedAt: old } });
+    process.env.FIXTURE_REMOVED = gone!.youtubeId;
+    resetFixtureStore();
+    try {
+      const report = await runCompliance();
+      expect(report.channels.refreshed).toBe(1);
+      expect(report.videos.refreshed).toBe(rest.length);
+      expect(report.videos.deleted).toBe(1);
+      expect(await db.video.findUnique({ where: { id: gone!.id } })).toBeNull();
+      const stale = await db.video.count({ where: { lastRefreshedAt: { lt: new Date(Date.now() - 27 * 86_400_000) } } });
+      expect(stale).toBe(0);
+    } finally {
+      delete process.env.FIXTURE_REMOVED;
+      resetFixtureStore();
+    }
   });
 });
