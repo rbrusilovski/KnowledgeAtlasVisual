@@ -55,6 +55,8 @@ const serverSchema = z
     PROPOSAL_EXECUTION_DAYS: int(7),
     /** Compliance: refresh proposals are raised this many days before an API-data retention deadline. */
     COMPLIANCE_REFRESH_LEAD_DAYS: int(5),
+    /** seed = fixed demo taxonomy (fixtures/tests); dynamic = categories generated from the corpus. */
+    TAXONOMY_MODE: z.enum(["seed", "dynamic"]).default("seed"),
     CLASSIFY_MIN_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.35),
     RATE_LIMIT_ANON_PER_MIN: int(60),
     RATE_LIMIT_USER_PER_MIN: int(300),

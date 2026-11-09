@@ -13,6 +13,7 @@ import { getVector, setVector, normalize, toVectorLiteral } from "@/server/db/ve
 import { normalizePhrase, tokenize, singularize } from "@/server/services/topics";
 import { aiEnabled, rerankNiche } from "@/server/services/ai";
 import { TAXONOMY } from "@/server/taxonomy";
+import { dynamicMode, projectChannels, recomputeTaxonomyCounts } from "@/server/services/taxonomy";
 import { allowed as policyAllows } from "@/server/youtube/policy";
 
 export const WEIGHTS = { embedding: 0.55, keyword: 0.25, topic: 0.2 } as const;
@@ -164,6 +165,13 @@ export async function recomputeNicheCounts() {
 
 export async function classifyChannel(channelId: string): Promise<{ assignments: Assignment[]; manual: boolean } | null> {
   if (!policyAllows("derived-data")) return null;
+  if (dynamicMode()) {
+    // Dynamic taxonomy: channel membership is the aggregate of its videos' evidence, not a fixed-taxonomy score.
+    const r = await projectChannels([channelId]);
+    await recomputeTaxonomyCounts();
+    if (r.dirty.length) await enqueue.graph(r.dirty);
+    return { assignments: [], manual: false };
+  }
   const manual = await db.channelNiche.findMany({ where: { channelId, method: "MANUAL" }, select: { nicheId: true } });
   const ch = await db.channel.findUnique({ where: { id: channelId }, select: { youtubeId: true } });
   if (!ch) return null;

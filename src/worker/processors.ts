@@ -7,6 +7,7 @@ import { authorizeJob, expireProposals } from "@/server/services/expansion";
 import { embedEntities, warmup } from "@/server/services/embeddings";
 import { extractTopics, applyAiTopics } from "@/server/services/topics";
 import { classifyChannel } from "@/server/services/classification";
+import { classifyVideos } from "@/server/services/taxonomy";
 import { aiEnabled, extractVideo } from "@/server/services/ai";
 import { buildFromDirtySet, buildDirty, rebuildAll, computeCommunities, pruneTombstones } from "@/server/services/graph";
 import { db } from "@/server/db";
@@ -41,6 +42,8 @@ export function startWorkers(): Worker[] {
     createWorker(QUEUES.embed, (job) => embedEntities(job.data.entity, job.data.ids)),
     createWorker(QUEUES.topics, (job) => extractTopics(job.data.videoIds)),
     createWorker(QUEUES.classify, (job) => classifyChannel(job.data.channelId)),
+    // Internal classification of already-collected videos: no YouTube calls, no approval needed.
+    createWorker(QUEUES.taxonomy, (job) => classifyVideos(job.data.videoIds)),
     createWorker(QUEUES.graph, async (job) => {
       const stats = job.data.full ? await rebuildAll() : job.data.dirtyNodeIds?.length ? await buildDirty(job.data.dirtyNodeIds) : await buildFromDirtySet();
       // Communities after significant change (debounced job).

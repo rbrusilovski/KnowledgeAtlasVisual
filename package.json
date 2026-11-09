@@ -26,7 +26,9 @@
     "e2e": "playwright test",
     "yt:smoke": "tsx scripts/yt-smoke.ts",
     "demo:retire": "tsx scripts/demo-retire.ts",
-    "yt:candidates": "tsx scripts/yt-candidates.ts"
+    "taxonomy": "tsx scripts/taxonomy.ts",
+    "yt:candidates": "tsx scripts/yt-candidates.ts",
+    "propose": "tsx scripts/propose.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",

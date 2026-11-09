@@ -1,0 +1,57 @@
+# snapshot 2026-11-09T23:12:39Z
+ChannelNiche|32
+Niche.SEED|0
+ExpansionProposal|3
+Channel|18
+TaxonomyRun|24
+Niche.DYNAMIC.top|8
+Niche.DYNAMIC.sub|28
+VideoNiche|2241
+GraphNode|3628
+GraphEdge|10239
+Video|2202
+Video.embedded|2202
+VideoTopic|17170
+Topic|12715
+node.CHANNEL|18
+node.NICHE|8
+node.SUBNICHE|28
+node.TOPIC|1372
+node.VIDEO|2202
+edge.CHANNEL_TOPIC|244
+edge.CONTAINS|28
+edge.FEATURED|18
+edge.IN_NICHE|32
+edge.MENTIONS|5827
+edge.NICHE_TOPIC|260
+edge.PUBLISHED|2202
+edge.TOPIC_RELATED|1628
+# niches
+chatgpt > chatgpt-game|190|1
+chess > chess-harry-kane-ballon-d-or|12|1
+mathematics > area-shape|83|2
+mathematics > banach-tarski-paradox-infinity|25|0
+mathematics > election-math|93|1
+mathematics > euler-formula|99|1
+mathematics > jame-grime-problem|65|1
+mathematics > mathematics-2|46|1
+mathematics > number-prime|138|1
+mathematics > physics-math|66|1
+mathematics > puzzle-llm|37|1
+mathematics > puzzle-math|119|1
+mathematics > rubik-cube-magic|26|1
+neural-network > language-model-deep-learning|71|2
+neural-network > machine-learning-statistics|152|1
+roman > roman-battle-of-cannae|10|1
+science > image|64|4
+science-physics > engineering-experiment|45|2
+science-physics > engineering-wrong|79|1
+science-physics > light-water|33|1
+science > science-2|153|1
+science > stable-diffusion-dream|26|1
+space-2 > black-hole-physics|206|1
+space-2 > black-hole-universe|198|1
+space-2 > nasa-life|19|0
+space-2 > paradox-relativity|78|1
+space-2 > particle-science|41|1
+space-2 > sun-earth|67|1

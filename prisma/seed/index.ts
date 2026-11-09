@@ -46,12 +46,17 @@ async function drainAll(timeoutMs = 30 * 60_000) {
 
 async function main() {
   const t0 = Date.now();
-  const toEmbed = await seedTaxonomy();
-  if (toEmbed.length) await embedEntities("niche", toEmbed);
-  log(`taxonomy: ${await db.niche.count()} niches (${toEmbed.length} centroids embedded)`);
-  const { buildDirty } = await import("@/server/services/graph");
-  const nicheRows = await db.niche.findMany({ select: { slug: true, depth: true } });
-  await buildDirty(nicheRows.map((n) => `${n.depth === 0 ? "niche" : "subniche"}:${n.slug}`));
+  // The fixed demo taxonomy is fixture/test data. With TAXONOMY_MODE=dynamic categories come from the corpus
+  // (pnpm taxonomy), so the seed must not recreate demo niches in a live database.
+  if (env.TAXONOMY_MODE === "dynamic") log("TAXONOMY_MODE=dynamic: not seeding the demo taxonomy");
+  else {
+    const toEmbed = await seedTaxonomy();
+    if (toEmbed.length) await embedEntities("niche", toEmbed);
+    log(`taxonomy: ${await db.niche.count()} niches (${toEmbed.length} centroids embedded)`);
+    const { buildDirty } = await import("@/server/services/graph");
+    const nicheRows = await db.niche.findMany({ select: { slug: true, depth: true } });
+    await buildDirty(nicheRows.map((n) => `${n.depth === 0 ? "niche" : "subniche"}:${n.slug}`));
+  }
 
   const demoEmail = "demo@atlas.local";
   if (!(await db.user.findUnique({ where: { email: demoEmail } }))) {

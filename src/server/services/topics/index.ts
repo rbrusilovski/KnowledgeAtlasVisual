@@ -36,11 +36,15 @@ async function updateDf(videoId: string, phrases: string[]) {
 const RESOLVE_KEY = (label: string) => key("topics", "resolve", label);
 
 export async function canonicalize(label: string, cache = new Map<string, string>()): Promise<{ id: string; created: boolean }> {
-  const hit = cache.get(label) ?? (await redis.get(RESOLVE_KEY(label)));
-  if (hit) {
+  const local = cache.get(label);
+  if (local) return { id: local, created: false };
+  const hit = await redis.get(RESOLVE_KEY(label));
+  // The Redis cache can outlive the Topic it points to (topic deleted/merged, demo data retired): verify it.
+  if (hit && (await db.topic.findUnique({ where: { id: hit }, select: { id: true } }))) {
     cache.set(label, hit);
     return { id: hit, created: false };
   }
+  if (hit) await redis.del(RESOLVE_KEY(label));
   const r = await canonicalizeUncached(label, cache);
   await redis.set(RESOLVE_KEY(label), r.id, "EX", 7 * 86400);
   return r;

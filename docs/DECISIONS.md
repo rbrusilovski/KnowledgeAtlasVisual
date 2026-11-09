@@ -83,3 +83,27 @@ Format: decision — reason — alternative considered.
   Pacific-midnight reset; SYSTEM proposals are compared with the background share.
 - **ESLint ignores `.claude/**`** — nested agent worktrees live there and their build output was being linted.
 
+
+## Dynamic taxonomy (2026-11-09)
+- **Video evidence is authoritative** (`VideoNiche`: decision, confidence, rationale, evidence, run id, model, prompt/taxonomy
+  version); `ChannelNiche` is a projection = subniches holding ≥ 12 % of a channel's classified videos (≤ 3, best kept).
+  MANUAL channel assignments are never overwritten — alternative: keep channel-level classification (cannot explain
+  *which* videos made a category exist).
+- **Deterministic engine, AI optional**: spherical k-means (seeded) → support/duplicate enforcement → Ward-style
+  agglomeration for parents → c-TF-IDF naming that drops channel boilerplate (names, credits, Patreon lines) and
+  down-weights corpus-wide words for subniche names. No `ANTHROPIC_API_KEY` is configured, so AI naming/decisions were not
+  built; naming quality is the main thing AI would improve.
+- **Growth**: new videos REUSE the nearest subniche (cos ≥ 0.35) or wait in a pool; a pool group of ≥ 4 (cos ≥ 0.5) becomes
+  a subniche under the nearest niche (cos ≥ 0.45) or, with ≥ 10, a new niche. Duplicates are refused by centroid cos ≥ 0.9
+  or trigram name ≥ 0.8. All creation runs under one Postgres advisory lock (`pg_advisory_xact_lock`) on a single-consumer
+  queue — BullMQ dedup alone is not a guarantee.
+- **Shadow first**: `pnpm taxonomy shadow` plans without writing (audit row only); `apply` writes; `apply --rebuild`
+  replaces only DYNAMIC categories (stable slugs, MANUAL ones kept).
+- **Demo cleanup is two-step**: dry run prints a plan hash; `cleanup --yes <hash>` executes only that unchanged plan, only
+  when every channel has a dynamic category, matching the TAXONOMY manifest AND `origin = SEED`. User rows that reference
+  demo nodes (layouts, collections, views, discovery history) are reported and kept.
+- **`TAXONOMY_MODE=seed|dynamic`** (default seed for fixtures/tests); dynamic mode also stops `db:seed` from recreating the
+  demo taxonomy in a live database.
+- **Tests pin policy flags + TAXONOMY_MODE to safe defaults** in `tests/setup-env.ts` — a policy test was reading the
+  owner's local `.env` approvals.
+- **Topic resolve cache is verified against the DB** — stale Redis ids from retired demo data caused FK violations.

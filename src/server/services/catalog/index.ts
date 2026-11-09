@@ -254,7 +254,7 @@ export async function nicheTree() {
 }
 
 export async function nicheDetail(idOrSlug: string) {
-  const n = await db.niche.findFirst({ where: { OR: [{ id: idOrSlug }, { slug: idOrSlug.replace(/^(sub)?niche:/, "") }] }, select: { id: true, slug: true, name: true, description: true, depth: true, keywords: true, discoveryQueries: true, channelCount: true, parent: { select: { slug: true, name: true } }, children: { select: { id: true, slug: true, name: true, channelCount: true } } } });
+  const n = await db.niche.findFirst({ where: { OR: [{ id: idOrSlug }, { slug: idOrSlug.replace(/^(sub)?niche:/, "") }] }, select: { id: true, slug: true, name: true, description: true, depth: true, keywords: true, discoveryQueries: true, channelCount: true, videoCount: true, origin: true, bootstrap: true, parent: { select: { slug: true, name: true } }, children: { select: { id: true, slug: true, name: true, channelCount: true } } } });
   if (!n) throw notFound("Niche");
   const nicheIds = n.depth === 0 ? n.children.map((c) => c.id) : [n.id];
   const channels = await db.channel.findMany({ where: { niches: { some: { nicheId: { in: nicheIds } } } }, orderBy: { subscriberCount: { sort: "desc", nulls: "last" } }, take: 25, select: channelSummarySelect });

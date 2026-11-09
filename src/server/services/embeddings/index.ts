@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { db } from "@/server/db";
+import { env } from "@/server/env";
 import { redis, key } from "@/server/redis";
 import { log } from "@/server/logger";
 import { enqueue } from "@/server/jobs";
@@ -56,7 +57,8 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
 
 export type EmbedEntity = "channel" | "video" | "topic" | "chunk" | "niche";
 
-export async function embedEntities(entity: EmbedEntity, ids: string[]): Promise<{ embedded: number; skipped: number }> {
+export async function embedEntities(entity: EmbedEntity, ids: string[], opts: { followUps?: boolean } = {}): Promise<{ embedded: number; skipped: number }> {
+  const followUps = opts.followUps ?? true;
   let embedded = 0;
   let skipped = 0;
   // Embeddings of API Data are derived data (policy-gated for live data). Niche centroids come from Atlas's own taxonomy.
@@ -75,7 +77,7 @@ export async function embedEntities(entity: EmbedEntity, ids: string[]): Promise
       const [v] = await embedCached([text]);
       await setVector("Channel", id, v!, { embeddingHash: h });
       embedded++;
-      await enqueue.classify(id);
+      if (followUps) await enqueue.classify(id);
     }
     if (embedded) await enqueue.graph(ids.length ? (await db.channel.findMany({ where: { id: { in: ids } }, select: { youtubeId: true } })).map((c) => `channel:${c.youtubeId}`) : []);
   } else if (entity === "video") {
@@ -85,6 +87,8 @@ export async function embedEntities(entity: EmbedEntity, ids: string[]): Promise
     const vecs = await embedCached(todo.map((t) => t.text));
     for (let i = 0; i < todo.length; i++) await setVector("Video", todo[i]!.r.id, vecs[i]!, { embeddingHash: todo[i]!.h });
     embedded = todo.length;
+    // New/changed video vectors feed the dynamic taxonomy (classification of data already collected).
+    if (followUps && embedded && env.TAXONOMY_MODE === "dynamic") await enqueue.taxonomy(todo.map((t) => t.r.id));
   } else if (entity === "topic") {
     const rows = await db.topic.findMany({ where: { id: { in: ids } }, select: { id: true, label: true, aliases: true } });
     const vecs = await embedCached(rows.map(topicText));

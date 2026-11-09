@@ -12,6 +12,7 @@ Next.js here is v16 — read `node_modules/next/dist/docs/` before using an unfa
 - `pnpm db:migrate` (deploy) · `pnpm db:migrate:dev` · `pnpm db:seed` · `pnpm db:reset`
 - `pnpm typecheck` · `pnpm lint` · `pnpm test` · `pnpm test:integration` · `pnpm e2e` · `pnpm build`
 - `pnpm fixtures:generate` · `pnpm yt:probe <url|@handle>` · `pnpm graph:rebuild [--topics]` · `pnpm embeddings:reindex`
+- `pnpm taxonomy status|reconcile|shadow|apply [--rebuild]|classify|cleanup [--yes <hash>]` (dynamic taxonomy; never calls YouTube)
 - Parallel worktrees share Docker services: isolate runs with `TEST_DATABASE_URL=…/atlas_test_<name>`
   `TEST_REDIS_PREFIX=atlas-test-<name>` (integration) and `E2E_PORT` / `E2E_DATABASE_URL` / `E2E_REDIS_PREFIX` /
   `E2E_BULL_BOARD_PORT` (e2e), or the runs corrupt each other's state.
@@ -43,6 +44,12 @@ Next.js here is v16 — read `node_modules/next/dist/docs/` before using an unfa
 - Normalization + coverage: `src/server/youtube/normalize.ts`, `services/coverage`. Policy gates: `youtube/policy.ts`.
 - Transcript reads must go through `visibleWhere`/`visibleSql`/`corpusWhere` (services/transcripts).
 - Docs: `docs/COMPLIANCE_DECISIONS.md`, `docs/DEFERRED_AUDIT_FINDINGS.md`.
+
+## Dynamic taxonomy
+- `services/taxonomy`: `VideoNiche` evidence is authoritative; `ChannelNiche` is its projection (MANUAL wins).
+  `TAXONOMY_MODE=dynamic` routes `classifyChannel` to projection and video embedding → `taxonomy-classify` queue.
+- Category creation only under the advisory lock in `classifyVideos`/`bootstrapTaxonomy`. Demo cleanup only via the
+  dry-run hash flow, and only with the owner's explicit approval.
 
 ## Gotchas
 - HNSW indexes are partial: every KNN query must include `WHERE embedding IS NOT NULL`.

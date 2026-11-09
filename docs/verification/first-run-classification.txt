@@ -1,0 +1,18 @@
+Adam Ragusea|Machine Learning & Statistics|REUSE|1
+GothamChess|Puzzle & Math|REUSE|12
+Kurzgesagt – In a Nutshell|Cancer|CREATE|5
+Kurzgesagt – In a Nutshell|Puzzle & Math|REUSE|2
+Kurzgesagt – In a Nutshell|Black Hole & Universe|REUSE|2
+Kurzgesagt – In a Nutshell|Sun & Earth|REUSE|1
+Kurzgesagt – In a Nutshell|Language Model & Deep Learning|REUSE|1
+Kurzgesagt – In a Nutshell|Image|REUSE|1
+OverSimplified|Puzzle & Math|REUSE|5
+OverSimplified|Chatgpt & Game|REUSE|5
+OverSimplified|Election & Math|REUSE|2
+Steve Mould|Number & Prime|REUSE|4
+Steve Mould|Stable Diffusion & Dream|REUSE|2
+Steve Mould|Puzzle & Math|REUSE|2
+Steve Mould|Area & Shape|REUSE|1
+Welch Labs|Image|REUSE|3
+Welch Labs|Stable Diffusion & Dream|REUSE|1
+Welch Labs|Engineering & Wrong|REUSE|1

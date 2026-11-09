@@ -21,6 +21,7 @@ export const QUEUES = {
   embed: "embed",
   topics: "extract-topics",
   classify: "classify-channel",
+  taxonomy: "taxonomy-classify",
   graph: "graph-build",
   communities: "communities",
   ai: "ai-extract",
@@ -57,6 +58,7 @@ export interface JobPayloads {
   embed: { entity: "channel" | "video" | "topic" | "chunk" | "niche"; ids: string[] };
   "extract-topics": { videoIds: string[] };
   "classify-channel": { channelId: string };
+  "taxonomy-classify": { videoIds: string[] };
   "graph-build": { dirtyNodeIds?: string[]; full?: boolean };
   communities: Record<string, never>;
   "ai-extract": { targetType: "video"; targetId: string; contentHash?: string; requestedBy?: string };
@@ -79,6 +81,8 @@ export const CONCURRENCY: Record<QueueName, number> = {
   embed: 1,
   "extract-topics": 2,
   "classify-channel": 4,
+  // Single consumer: category creation is also serialized by a Postgres advisory lock.
+  "taxonomy-classify": 1,
   "graph-build": 1,
   communities: 1,
   "ai-extract": 2,
@@ -153,6 +157,8 @@ export const enqueue = {
     ids.length ? add(QUEUES.embed, { entity, ids }, { jobId: `embed-${entity}-${hashIds(ids)}` }) : null,
   topics: (videoIds: string[]) => (videoIds.length ? add(QUEUES.topics, { videoIds }, { jobId: `topics-${hashIds(videoIds)}` }) : null),
   classify: (channelId: string) => add(QUEUES.classify, { channelId }, { jobId: `cls-${channelId}-${Date.now()}`, deduplication: { id: `cls-${channelId}`, ttl: 5_000 } }),
+  /** Classify already-collected videos into the dynamic taxonomy (internal derived data; collects nothing). */
+  taxonomy: (videoIds: string[]) => (videoIds.length ? add(QUEUES.taxonomy, { videoIds }, { jobId: `tax-${hashIds(videoIds)}` }) : null),
   /** Debounced: dirty node IDs accumulate in a Redis set; one build drains them. */
   graph: async (dirtyNodeIds: string[]) => {
     if (dirtyNodeIds.length) await redis.sadd(key("graph", "dirty"), ...dirtyNodeIds);

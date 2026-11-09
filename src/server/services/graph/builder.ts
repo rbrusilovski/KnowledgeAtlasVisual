@@ -95,15 +95,15 @@ async function nodeFor(id: string): Promise<NodeRow | null> {
   switch (p.type) {
     case "NICHE":
     case "SUBNICHE": {
-      const n = await db.niche.findUnique({ where: { slug: p.ref }, select: { slug: true, name: true, description: true, channelCount: true, depth: true, parent: { select: { slug: true } } } });
-      if (!n || (n.depth === 0) !== (p.type === "NICHE")) return null;
+      const n = await db.niche.findUnique({ where: { slug: p.ref }, select: { slug: true, name: true, description: true, channelCount: true, videoCount: true, depth: true, origin: true, status: true, bootstrap: true, parent: { select: { slug: true } } } });
+      if (!n || n.status !== "ACTIVE" || (n.depth === 0) !== (p.type === "NICHE")) return null;
       return {
         id,
         type: p.type,
         refId: n.slug,
         label: n.name,
         size: p.type === "NICHE" ? 28 + Math.log2(1 + n.channelCount) * 2 : 14 + Math.log2(1 + n.channelCount) * 2,
-        attrs: { description: n.description, channelCount: n.channelCount, parent: n.parent?.slug ?? null },
+        attrs: { description: n.description, channelCount: n.channelCount, videoCount: n.videoCount, parent: n.parent?.slug ?? null, origin: n.origin === "DYNAMIC" ? "atlas-inferred" : n.origin === "MANUAL" ? "user" : "seed", ...(n.bootstrap ? { bootstrap: true } : {}) },
       };
     }
     case "CHANNEL": {
@@ -337,8 +337,8 @@ async function topicEdges(slug: string): Promise<Owned> {
 
 async function nicheEdges(slug: string, isSub: boolean): Promise<Owned> {
   const nodeId = `${isSub ? "subniche" : "niche"}:${slug}`;
-  const n = await db.niche.findUnique({ where: { slug }, select: { id: true, slug: true, children: { select: { slug: true } }, parent: { select: { slug: true } } } });
-  if (!n) return { replace: [], votes: [] };
+  const n = await db.niche.findUnique({ where: { slug }, select: { id: true, slug: true, status: true, children: { where: { status: "ACTIVE" }, select: { slug: true } }, parent: { select: { slug: true } } } });
+  if (!n || n.status !== "ACTIVE") return { replace: [], votes: [] };
   if (!isSub) {
     return { replace: [{ kind: "CONTAINS", side: "source", edges: n.children.map((c) => ({ sourceId: nodeId, targetId: `subniche:${c.slug}`, kind: "CONTAINS", weight: 1, evidence: null })) }], votes: [] };
   }
@@ -524,7 +524,7 @@ export async function buildFromDirtySet(): Promise<BuildStats | null> {
 /** Every node ID that should exist, in dependency-friendly order. */
 export async function allNodeIds(): Promise<string[]> {
   const [niches, channels, videos, topics] = await Promise.all([
-    db.niche.findMany({ select: { slug: true, depth: true } }),
+    db.niche.findMany({ where: { status: "ACTIVE" }, select: { slug: true, depth: true } }),
     db.channel.findMany({ where: { isAvailable: true }, select: { youtubeId: true } }),
     db.video.findMany({ where: { isAvailable: true }, select: { youtubeId: true } }),
     db.topic.findMany({ where: { videoCount: { gte: MIN_TOPIC_VIDEOS } }, select: { slug: true } }),

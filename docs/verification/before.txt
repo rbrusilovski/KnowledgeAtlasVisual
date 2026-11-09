@@ -1,0 +1,55 @@
+# snapshot 2026-11-09T23:06:41Z
+ChannelNiche|27
+ExpansionProposal|2
+Niche.SEED|0
+Channel|12
+TaxonomyRun|16
+Niche.DYNAMIC.top|6
+Niche.DYNAMIC.sub|26
+Video|2130
+VideoNiche|2215
+GraphNode|3486
+GraphEdge|9754
+Topic|12372
+VideoTopic|16670
+Video.embedded|2130
+node.CHANNEL|12
+node.NICHE|6
+node.SUBNICHE|26
+node.TOPIC|1312
+node.VIDEO|2130
+edge.CHANNEL_TOPIC|180
+edge.CONTAINS|26
+edge.FEATURED|16
+edge.IN_NICHE|27
+edge.MENTIONS|5610
+edge.NICHE_TOPIC|240
+edge.PUBLISHED|2130
+edge.TOPIC_RELATED|1525
+# niches
+chatgpt > chatgpt-game|190|1
+mathematics > area-shape|83|2
+mathematics > banach-tarski-paradox-infinity|25|0
+mathematics > election-math|93|1
+mathematics > euler-formula|99|1
+mathematics > jame-grime-problem|65|1
+mathematics > mathematics-2|46|1
+mathematics > number-prime|138|1
+mathematics > physics-math|66|1
+mathematics > puzzle-llm|37|1
+mathematics > puzzle-math|119|1
+mathematics > rubik-cube-magic|26|1
+neural-network > language-model-deep-learning|71|2
+neural-network > machine-learning-statistics|152|1
+science > image|61|2
+science-physics > engineering-experiment|44|1
+science-physics > engineering-wrong|79|1
+science-physics > light-water|33|1
+science > science-2|153|1
+science > stable-diffusion-dream|26|1
+space-2 > black-hole-physics|206|1
+space-2 > black-hole-universe|198|1
+space-2 > nasa-life|19|0
+space-2 > paradox-relativity|78|1
+space-2 > particle-science|41|1
+space-2 > sun-earth|67|1

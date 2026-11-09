@@ -271,6 +271,7 @@ model Video {
   channel              Channel                     @relation(fields: [channelId], references: [id], onDelete: Cascade)
   transcripts          Transcript[]
   topics               VideoTopic[]
+  niches               VideoNiche[]
   coverage             FieldCoverage[]
   createdAt            DateTime                    @default(now())
   updatedAt            DateTime                    @updatedAt
@@ -336,11 +337,72 @@ model Niche {
   centroid         Unsupported("vector(384)")?
   centroidCount    Int                         @default(0)
   channelCount     Int                         @default(0)
+  videoCount       Int                         @default(0)
+  /// SEED = predefined demo taxonomy, DYNAMIC = generated from corpus evidence, MANUAL = created by a user
+  origin           NicheOrigin                 @default(SEED)
+  status           NicheStatus                 @default(ACTIVE)
+  /// Generated categories record the run that created them (provenance) and a bootstrap flag to revisit.
+  createdByRunId   String?
+  bootstrap        Boolean                     @default(false)
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @default(now()) @updatedAt
   parent           Niche?                      @relation("NicheTree", fields: [parentId], references: [id], onDelete: Cascade)
   children         Niche[]                     @relation("NicheTree")
   channels         ChannelNiche[]
+  videos           VideoNiche[]
 
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "Niche_name_trgm_idx")
+  @@index([origin, status])
+}
+
+enum NicheOrigin {
+  SEED
+  DYNAMIC
+  MANUAL
+}
+
+enum NicheStatus {
+  ACTIVE
+  PROVISIONAL
+  RETIRED
+}
+
+/// Authoritative taxonomy evidence: which videos place content in which subniche, and why.
+/// ChannelNiche is a projection aggregated from these rows (MANUAL channel assignments still win).
+model VideoNiche {
+  videoId         String
+  nicheId         String
+  confidence      Float
+  /// REUSE (nearest existing category) | CREATE (founding member of a new category) | MANUAL
+  decision        String
+  rationale       String?
+  /// { cosine, topics[], titleTerms[], neighbours? }
+  evidence        Json?
+  contentHash     String?
+  model           String?
+  promptVersion   String?
+  taxonomyVersion Int      @default(1)
+  runId           String?
+  createdAt       DateTime @default(now())
+  video           Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  niche           Niche    @relation(fields: [nicheId], references: [id], onDelete: Cascade)
+
+  @@id([videoId, nicheId])
+  @@index([nicheId, confidence])
+}
+
+model TaxonomyRun {
+  id         String    @id @default(cuid())
+  /// BOOTSTRAP | INCREMENTAL | SHADOW
+  kind       String
+  status     String    @default("RUNNING")
+  params     Json      @default("{}")
+  stats      Json      @default("{}")
+  error      String?
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([startedAt])
 }
 
 model ChannelNiche {
