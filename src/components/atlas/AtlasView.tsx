@@ -107,6 +107,15 @@ export function AtlasView() {
     add.mutate({ collectionId, workspaceId: workspace?.id, nodeIds: ids }, { onSuccess: (r) => toast.success(r.added ? `Saved to ${name}` : `Already in ${name}`) });
   });
 
+  // Effect events always see the latest workspace/collections (the mount effect runs once).
+  const onDragEnd = useEffectEvent((nodeId: string, x: number, y: number) => {
+    saveLayout(nodeId, x, y, true);
+    const pointer = lastPointerRef.current;
+    const target = pointer && document.elementFromPoint(pointer.x, pointer.y)?.closest("[data-collection-drop]");
+    const collectionId = target?.getAttribute("data-collection-drop");
+    if (collectionId) dropToCollection(collectionId, [nodeId]);
+  });
+
   // Mount sigma once.
   useEffect(() => {
     const el = containerRef.current;
@@ -117,13 +126,7 @@ export function AtlasView() {
         onSelect: (ids, mode) => useUi.getState().select(ids, mode),
         onHover: (h) => useUi.getState().set("hovered", h),
         onContextMenu: (m) => useUi.getState().set("contextMenu", m),
-        onDragEnd: (nodeId, x, y) => {
-          saveLayout(nodeId, x, y, true);
-          const pointer = lastPointerRef.current;
-          const target = pointer && document.elementFromPoint(pointer.x, pointer.y)?.closest("[data-collection-drop]");
-          const collectionId = target?.getAttribute("data-collection-drop");
-          if (collectionId) dropToCollection(collectionId, [nodeId]);
-        },
+        onDragEnd: (nodeId, x, y) => onDragEnd(nodeId, x, y),
         onCamera: () => setCameraTick((t) => t + 1),
         onLayout: (running) => useUi.getState().set("layoutRunning", running),
         onExpand: (_id, added) => (added ? toast(`Expanded · ${added} new node${added === 1 ? "" : "s"}`) : toast("No new neighbors")),
@@ -137,7 +140,7 @@ export function AtlasView() {
       graphMeta.listeners.delete(bump);
       atlas.kill();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   // Merge server subgraph (+ pinned layout) into the graphology instance.
