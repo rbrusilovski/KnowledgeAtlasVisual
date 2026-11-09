@@ -4,9 +4,11 @@ import { notFound } from "@/server/errors";
 import { IdParam } from "@/shared/contracts/common";
 import type { JobStatus } from "@/shared/contracts/jobs";
 
-export const GET = withRoute({ auth: "none", params: IdParam }, async ({ params }): Promise<JobStatus> => {
+/** Job status for the user who requested it (admins: any). Previously unauthenticated. */
+export const GET = withRoute({ auth: "required", params: IdParam }, async ({ params, user }): Promise<JobStatus> => {
   const found = await findJob(params.id);
-  if (!found) throw notFound("Job");
+  const owner = (found?.job.data as { requestedBy?: string } | undefined)?.requestedBy;
+  if (!found || (user.role !== "ADMIN" && owner !== user.id)) throw notFound("Job");
   const { job, queue } = found;
   const state = (await job.getState()) as JobStatus["state"];
   return {

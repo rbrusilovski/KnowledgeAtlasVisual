@@ -4,7 +4,9 @@ import { enqueue } from "@/server/jobs";
 import { log } from "@/server/logger";
 import { knn } from "@/server/db/vector";
 import { embedTexts } from "@/server/services/embeddings";
-import { candidateFrequencies, topPhrases, slugify } from "./text";
+import { candidateFrequencies, topPhrases, slugify, normalizePhrase } from "./text";
+import { corpusWhere } from "@/server/services/transcripts";
+import { allowed as policyAllows } from "@/server/youtube/policy";
 
 export * from "./text";
 
@@ -98,8 +100,36 @@ export interface ExtractResult {
   links: number;
 }
 
+export const TFIDF_EXTRACTOR = "tfidf@1";
+
+/**
+ * Provenance for one extracted phrase: which source fields contain it (YouTube metadata vs shared transcript), the
+ * supporting transcript chunks with timestamps, and the score. Atlas-inferred — never presented as YouTube data.
+ */
+function topicEvidence(
+  v: { youtubeId: string; title: string; tags: string[]; description: string; transcripts: { id: string; chunks: { id: string; text: string; startSec: number }[] }[] },
+  phrase: string,
+  score: number,
+): Record<string, unknown> {
+  const has = (text: string) => normalizePhrase(text).includes(phrase);
+  const fields = [has(v.title) && "youtube.title", v.tags.some(has) && "youtube.tags", has(v.description.slice(0, 3000)) && "youtube.description"].filter(Boolean) as string[];
+  const tr = v.transcripts[0];
+  const chunks = tr ? tr.chunks.filter((c) => has(c.text)).slice(0, 3) : [];
+  if (chunks.length) fields.push("transcript");
+  return {
+    origin: "atlas-inferred",
+    extractor: TFIDF_EXTRACTOR,
+    score: +score.toFixed(4),
+    fields,
+    sourceVideo: v.youtubeId,
+    ...(chunks.length ? { transcriptId: tr!.id, chunks: chunks.map((c) => ({ chunkId: c.id, startSec: c.startSec, url: `https://www.youtube.com/watch?v=${v.youtubeId}&t=${Math.floor(c.startSec)}s` })) } : {}),
+    extractedAt: new Date().toISOString(),
+  };
+}
+
 /** TF-IDF keyphrases → canonical topics → VideoTopic (source "tfidf"). AI-sourced links are preserved. */
 export async function extractTopics(videoIds: string[]): Promise<ExtractResult> {
+  if (!policyAllows("derived-data")) return { videos: 0, topicsCreated: 0, links: 0 };
   const videos = await db.video.findMany({
     where: { id: { in: videoIds } },
     select: {
@@ -109,12 +139,13 @@ export async function extractTopics(videoIds: string[]): Promise<ExtractResult> 
       tags: true,
       description: true,
       channel: { select: { youtubeId: true } },
-      transcript: { select: { chunks: { orderBy: { idx: "asc" }, take: 8, select: { text: true } } } },
+      // Only shared-corpus transcripts feed shared topics; private transcripts never leak into the corpus.
+      transcripts: { where: corpusWhere(), orderBy: { fetchedAt: "desc" }, take: 1, select: { id: true, chunks: { orderBy: { idx: "asc" }, take: 8, select: { id: true, text: true, startSec: true } } } },
     },
   });
   const perVideo = new Map<string, Map<string, number>>();
   for (const v of videos) {
-    const tf = candidateFrequencies({ title: v.title, tags: v.tags, description: v.description, transcript: v.transcript?.chunks.map((c) => c.text) });
+    const tf = candidateFrequencies({ title: v.title, tags: v.tags, description: v.description, transcript: v.transcripts[0]?.chunks.map((c) => c.text) });
     perVideo.set(v.id, tf);
     await updateDf(v.id, [...tf.keys()]);
   }
@@ -131,17 +162,19 @@ export async function extractTopics(videoIds: string[]): Promise<ExtractResult> 
     const top = topPhrases(perVideo.get(v.id)!, (p) => dfMap.get(p) ?? 0, nDocs, TOPICS_PER_VIDEO);
     const max = top[0]?.score ?? 1;
     const weights = new Map<string, number>();
+    const evidence = new Map<string, Record<string, unknown>>();
     for (const t of top) {
       const c = await canonicalize(t.phrase, cache);
       if (c.created) created.push(c.id);
       weights.set(c.id, Math.max(weights.get(c.id) ?? 0, +(t.score / max).toFixed(4)));
+      if (!evidence.has(c.id)) evidence.set(c.id, topicEvidence(v, t.phrase, t.score));
     }
     const prev = await db.videoTopic.findMany({ where: { videoId: v.id, source: "tfidf" }, select: { topicId: true, weight: true } });
     const same = prev.length === weights.size && prev.every((p) => Math.abs((weights.get(p.topicId) ?? -1) - p.weight) < 1e-4);
     if (!same) {
       await db.$transaction([
         db.videoTopic.deleteMany({ where: { videoId: v.id, source: "tfidf" } }),
-        db.videoTopic.createMany({ data: [...weights].map(([topicId, weight]) => ({ videoId: v.id, topicId, weight, source: "tfidf" })), skipDuplicates: true }),
+        db.videoTopic.createMany({ data: [...weights].map(([topicId, weight]) => ({ videoId: v.id, topicId, weight, source: "tfidf", extractor: TFIDF_EXTRACTOR, evidence: evidence.get(topicId) as Prisma.InputJsonValue })), skipDuplicates: true }),
       ]);
       prev.forEach((p) => affected.add(p.topicId));
       weights.forEach((_w, id) => affected.add(id));
@@ -176,7 +209,7 @@ export async function applyAiTopics(videoId: string, labels: { label: string; we
   const prev = await db.videoTopic.findMany({ where: { videoId, source: "ai" }, select: { topicId: true } });
   await db.$transaction([
     db.videoTopic.deleteMany({ where: { videoId, source: "ai" } }),
-    db.videoTopic.createMany({ data: rows.map((r) => ({ videoId, ...r, source: "ai" })), skipDuplicates: true }),
+    db.videoTopic.createMany({ data: rows.map((r) => ({ videoId, ...r, source: "ai", extractor: "ai", evidence: { origin: "atlas-inferred", extractor: "ai", fields: ["youtube.title", "youtube.tags", "youtube.description", "corpus-transcript"], extractedAt: new Date().toISOString() } })), skipDuplicates: true }),
   ]);
   const affected = [...new Set([...prev.map((p) => p.topicId), ...rows.map((r) => r.topicId)])];
   await recomputeTopicCounts(affected);

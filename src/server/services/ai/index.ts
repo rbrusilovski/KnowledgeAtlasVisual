@@ -13,6 +13,8 @@ import { AppError } from "@/server/errors";
 import { redis, key } from "@/server/redis";
 import { log } from "@/server/logger";
 import { quotaDay, secondsUntilReset } from "@/server/services/quota";
+import { assertAllowed as assertPolicy } from "@/server/youtube/policy";
+import { corpusTranscriptText } from "@/server/services/transcripts";
 
 export const aiEnabled = () => features.ai;
 
@@ -77,10 +79,11 @@ export type VideoExtraction = z.infer<typeof VideoExtraction>;
 export async function videoContent(videoId: string) {
   const v = await db.video.findUnique({
     where: { id: videoId },
-    select: { id: true, title: true, description: true, tags: true, transcript: { select: { chunks: { orderBy: { idx: "asc" }, take: 12, select: { text: true } } } } },
+    select: { id: true, title: true, description: true, tags: true },
   });
   if (!v) throw new AppError("NOT_FOUND", "Video not found");
-  const transcript = v.transcript?.chunks.map((c) => c.text).join(" ").slice(0, 12_000) ?? "";
+  // Shared AI output may only use shared-corpus transcript text.
+  const transcript = (await corpusTranscriptText(videoId, 12)).join(" ").slice(0, 12_000);
   const content = `Title: ${v.title}\nTags: ${v.tags.join(", ")}\nDescription:\n${v.description.slice(0, 3000)}\n${transcript ? `\nTranscript excerpt:\n${transcript}` : ""}`;
   return { content, contentHash: createHash("sha256").update(content).digest("hex").slice(0, 32) };
 }
@@ -90,6 +93,7 @@ export async function getCachedExtraction(videoId: string) {
 }
 
 export async function extractVideo(videoId: string): Promise<{ output: VideoExtraction; cached: boolean }> {
+  assertPolicy("derived-data");
   const { content, contentHash } = await videoContent(videoId);
   const hit = await db.aiExtraction.findUnique({ where: { targetType_targetId_contentHash: { targetType: "video", targetId: videoId, contentHash } } });
   if (hit) return { output: hit.output as unknown as VideoExtraction, cached: true };

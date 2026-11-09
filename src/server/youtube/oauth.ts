@@ -11,6 +11,7 @@ import { AppError } from "@/server/errors";
 import { encrypt, decrypt } from "@/server/crypto";
 import { redis, key } from "@/server/redis";
 import * as quota from "@/server/services/quota";
+import { assertAllowed } from "./policy";
 
 const SCOPE = "https://www.googleapis.com/auth/youtube.force-ssl";
 const redirectUri = () => `${env.BETTER_AUTH_URL}/api/youtube/callback`;
@@ -38,6 +39,7 @@ async function tokenRequest(params: Record<string, string>) {
 
 export async function handleCallback(userId: string, code: string, state: string) {
   assertEnabled();
+  assertAllowed("live-collection");
   const owner = await redis.getdel(key("yt-oauth", state));
   if (!owner || owner !== userId) throw new AppError("FORBIDDEN", "Invalid or expired OAuth state");
   const t = await tokenRequest({ code, grant_type: "authorization_code", redirect_uri: redirectUri() });
@@ -61,9 +63,19 @@ export async function handleCallback(userId: string, code: string, state: string
 export async function accessTokenFor(connectionId: string): Promise<string> {
   const c = await db.youTubeConnection.findUniqueOrThrow({ where: { id: connectionId } });
   if (c.expiresAt.getTime() - Date.now() > 60_000) return decrypt(c.accessTokenEnc);
-  if (!c.refreshTokenEnc) throw new AppError("UNAUTHORIZED", "YouTube connection expired; reconnect your account");
-  const t = await tokenRequest({ grant_type: "refresh_token", refresh_token: decrypt(c.refreshTokenEnc) });
-  await db.youTubeConnection.update({ where: { id: c.id }, data: { accessTokenEnc: encrypt(t.access_token), expiresAt: new Date(Date.now() + t.expires_in * 1000) } });
+  if (!c.refreshTokenEnc) {
+    await db.youTubeConnection.update({ where: { id: c.id }, data: { lastRefreshError: "no refresh token" } });
+    throw new AppError("UNAUTHORIZED", "YouTube connection expired; reconnect your account");
+  }
+  let t: z.infer<typeof TokenResponse>;
+  try {
+    t = await tokenRequest({ grant_type: "refresh_token", refresh_token: decrypt(c.refreshTokenEnc) });
+  } catch (e) {
+    // Recorded so the compliance job can purge data for connections whose tokens can no longer be refreshed (III.D.2).
+    await db.youTubeConnection.update({ where: { id: c.id }, data: { lastRefreshError: (e instanceof Error ? e.message : "refresh failed").slice(0, 200) } });
+    throw e;
+  }
+  await db.youTubeConnection.update({ where: { id: c.id }, data: { accessTokenEnc: encrypt(t.access_token), expiresAt: new Date(Date.now() + t.expires_in * 1000), lastValidatedAt: new Date(), lastRefreshError: null } });
   return t.access_token;
 }
 

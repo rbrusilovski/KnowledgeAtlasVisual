@@ -22,6 +22,8 @@ interface FixtureStore {
   transcripts: Map<string, string>;
   /** Channels with `isAvailable=false` simulation (deleted upstream) — set via FIXTURE_REMOVED. */
   removed: Set<string>;
+  /** IDs still listed in uploads playlists but not returned by videos.list (private/deleted lag) — FIXTURE_UNAVAILABLE. */
+  unavailable: Set<string>;
 }
 
 let store: FixtureStore | null = null;
@@ -48,6 +50,7 @@ export function loadFixtures(): FixtureStore {
     sections: new Map(),
     transcripts: new Map(),
     removed: new Set((process.env.FIXTURE_REMOVED ?? "").split(",").filter(Boolean)),
+    unavailable: new Set((process.env.FIXTURE_UNAVAILABLE ?? "").split(",").filter(Boolean)),
   };
   for (const f of readdirSync(dir).filter((x) => x.endsWith(".json")).sort()) {
     const file = JSON.parse(readFileSync(path.join(dir, f), "utf8")) as FixtureChannelFile;
@@ -81,6 +84,56 @@ function visible(publishedAt: string) {
   return Date.parse(publishedAt) <= fixtureNow();
 }
 
+/** Deterministic 0..1 value per id (FNV-1a) so fixture variation is stable across runs. */
+export function fixtureRoll(id: string, salt: string): number {
+  let h = 0x811c9dc5;
+  for (const ch of `${salt}:${id}`) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193);
+  return (h >>> 0) / 0xffffffff;
+}
+
+/**
+ * The committed dataset predates full-field collection. Enrich responses at read time — deterministically — with the
+ * parts the live client now requests, including realistic gaps: ~12% of videos hide likes, ~6% have comments
+ * disabled, maxres/standard thumbnails exist only for some uploads. Mirrors what the real API returns.
+ */
+function enrichChannel(c: YtChannel): YtChannel {
+  const t = c.snippet?.thumbnails;
+  const dims = { default: [88, 88], medium: [240, 240], high: [800, 800] } as const;
+  return {
+    ...c,
+    snippet: c.snippet && {
+      ...c.snippet,
+      defaultLanguage: c.snippet.defaultLanguage ?? "en",
+      thumbnails: t && Object.fromEntries(Object.entries(t).map(([k, v]) => [k, { ...v, width: dims[k as keyof typeof dims]?.[0], height: dims[k as keyof typeof dims]?.[1] }])),
+    },
+    topicDetails: c.topicDetails && { ...c.topicDetails, topicIds: c.topicDetails.topicIds ?? (c.topicDetails.topicCategories ?? []).map((_, i) => `/m/fx${i}`) },
+    status: c.status ?? { privacyStatus: "public", isLinked: true, madeForKids: false },
+  };
+}
+
+function enrichVideo(v: YtVideo, channel: YtChannel | undefined): YtVideo {
+  const t = v.snippet?.thumbnails ?? {};
+  const base = t.high?.url ?? t.medium?.url ?? "";
+  const thumbnails: NonNullable<NonNullable<YtVideo["snippet"]>["thumbnails"]> = {
+    default: { url: base, width: 120, height: 90 },
+    medium: { url: t.medium?.url ?? base, width: 320, height: 180 },
+    high: { url: t.high?.url ?? base, width: 480, height: 360 },
+  };
+  if (fixtureRoll(v.id, "standard") < 0.6) thumbnails.standard = { url: base, width: 640, height: 480 };
+  if (fixtureRoll(v.id, "maxres") < 0.3) thumbnails.maxres = { url: base, width: 1280, height: 720 };
+  const stats = { ...v.statistics };
+  if (fixtureRoll(v.id, "likes") < 0.12) delete stats.likeCount;
+  if (fixtureRoll(v.id, "comments") < 0.06) delete stats.commentCount;
+  return {
+    ...v,
+    snippet: v.snippet && { ...v.snippet, channelTitle: v.snippet.channelTitle ?? channel?.snippet?.title, liveBroadcastContent: v.snippet.liveBroadcastContent ?? "none", defaultAudioLanguage: v.snippet.defaultAudioLanguage ?? "en", thumbnails },
+    contentDetails: v.contentDetails && { ...v.contentDetails, dimension: "2d", definition: fixtureRoll(v.id, "hd") < 0.85 ? "hd" : "sd", projection: "rectangular", licensedContent: false },
+    status: v.status ?? { uploadStatus: "processed", privacyStatus: "public", license: "youtube", embeddable: true, publicStatsViewable: true, madeForKids: false },
+    statistics: stats,
+    topicDetails: v.topicDetails ?? { topicCategories: channel?.topicDetails?.topicCategories ?? [] },
+  };
+}
+
 const tokenize = (s: string): string[] => s.toLowerCase().normalize("NFKD").match(/[a-z0-9]+/g) ?? [];
 
 /** Reads API-shaped JSON from fixtures/youtube; responses mirror real shapes so the same pipeline runs. */
@@ -98,7 +151,7 @@ export class FixtureYouTubeClient implements RawYouTubeClient {
       .filter((id) => !s.removed.has(id))
       .map((id) => s.channels.get(id))
       .filter((c): c is YtChannel => Boolean(c))
-      .map((c) => ({ ...c, statistics: c.statistics && { ...c.statistics, videoCount: BigInt(this.visibleCount(c)) } }));
+      .map((c) => enrichChannel({ ...c, statistics: c.statistics && { ...c.statistics, videoCount: BigInt(this.visibleCount(c)) } }));
   }
 
   private visibleCount(c: YtChannel) {
@@ -115,7 +168,7 @@ export class FixtureYouTubeClient implements RawYouTubeClient {
     const page = list.slice(offset, offset + MAX_PAGE_SIZE);
     const next = offset + MAX_PAGE_SIZE < list.length ? `o${offset + MAX_PAGE_SIZE}` : undefined;
     return {
-      items: page.map((u) => ({ videoId: u.id, publishedAt: u.publishedAt })),
+      items: page.map((u) => ({ videoId: u.id, publishedAt: u.publishedAt, privacyStatus: "public" })),
       nextPageToken: next,
       totalResults: list.length,
     };
@@ -125,10 +178,10 @@ export class FixtureYouTubeClient implements RawYouTubeClient {
     const s = loadFixtures();
     if (ids.length > MAX_IDS_PER_CALL) throw new YouTubeApiError(400, "invalidParameter", "Too many ids");
     return ids
-      .filter((id) => !s.removed.has(id))
+      .filter((id) => !s.removed.has(id) && !s.unavailable.has(id))
       .map((id) => s.videos.get(id))
       .filter((v): v is YtVideo & { __raw: unknown } => Boolean(v) && visible(v!.snippet!.publishedAt))
-      .map(({ __raw: _r, ...v }) => v as YtVideo);
+      .map(({ __raw: _r, ...v }) => enrichVideo(v as YtVideo, s.channels.get(v.snippet!.channelId)));
   }
 
   async channelSectionsList(channelId: string) {

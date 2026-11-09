@@ -8,11 +8,15 @@ import { Queue, QueueEvents, type JobsOptions } from "bullmq";
 import { bullConnection, redis, key } from "@/server/redis";
 import { env } from "@/server/env";
 import { currentRequestId } from "@/server/logger";
+import { db } from "@/server/db";
+import { AppError } from "@/server/errors";
 
 export const QUEUES = {
   ingest: "ingest-channel",
   sync: "sync-channel",
-  stats: "refresh-stats",
+  backfill: "backfill-history",
+  discover: "discover-channels",
+  refresh: "refresh-metadata",
   transcript: "fetch-transcript",
   embed: "embed",
   topics: "extract-topics",
@@ -27,11 +31,29 @@ export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
 
 export type Lane = "interactive" | "background";
 
+/**
+ * Every job that adds to or refreshes the corpus carries the approved proposal it executes under. The worker/service
+ * re-validates it (status, scope hash, job registration, target ∈ scope) before persisting anything.
+ */
+export interface ExpansionAuth {
+  proposalId: string;
+  scopeHash: string;
+}
+
+interface Authorized {
+  auth: ExpansionAuth;
+  lane: Lane;
+  requestedBy?: string;
+  requestId?: string;
+}
+
 export interface JobPayloads {
-  "ingest-channel": { youtubeId: string; requestedBy?: string; full?: boolean; aliases?: string[]; lane: Lane; requestId?: string; discoveredWith?: string[] };
-  "sync-channel": { channelId: string; lane?: Lane; requestedBy?: string; requestId?: string };
-  "refresh-stats": { videoIds: string[] };
-  "fetch-transcript": { videoId: string; provider: string };
+  "ingest-channel": Authorized & { youtubeId: string; aliases?: string[] };
+  "sync-channel": Authorized & { youtubeId: string };
+  "backfill-history": Authorized & { youtubeId: string; slice: number };
+  "discover-channels": Authorized;
+  "refresh-metadata": Authorized & { channelYoutubeIds: string[]; videoYoutubeIds: string[] };
+  "fetch-transcript": { videoId: string; provider: string; connectionId?: string; auth: ExpansionAuth };
   embed: { entity: "channel" | "video" | "topic" | "chunk" | "niche"; ids: string[] };
   "extract-topics": { videoIds: string[] };
   "classify-channel": { channelId: string };
@@ -39,13 +61,20 @@ export interface JobPayloads {
   communities: Record<string, never>;
   "ai-extract": { targetType: "video"; targetId: string; contentHash?: string; requestedBy?: string };
   compliance: Record<string, never>;
-  scheduler: { task?: "sync" | "stats" };
+  scheduler: { task?: "sync" | "stats" | "proposals" };
 }
+
+/** Queues whose jobs expand or refresh the corpus — only enqueueable under an approved, running proposal. */
+export const EXPANSION_QUEUES = ["ingest-channel", "sync-channel", "backfill-history", "discover-channels", "refresh-metadata"] as const;
+export type ExpansionQueue = (typeof EXPANSION_QUEUES)[number];
 
 export const CONCURRENCY: Record<QueueName, number> = {
   "ingest-channel": 3,
   "sync-channel": 5,
-  "refresh-stats": 5,
+  // Backfills run in bounded slices that re-enqueue themselves at low priority, so they never starve other work.
+  "backfill-history": 2,
+  "discover-channels": 1,
+  "refresh-metadata": 3,
   "fetch-transcript": 2,
   embed: 1,
   "extract-topics": 2,
@@ -89,28 +118,37 @@ export function getQueueEvents(name: QueueName): QueueEvents {
 }
 
 export const hashIds = (ids: string[]) => createHash("sha1").update([...ids].sort().join(",")).digest("hex").slice(0, 16);
-const hourStamp = (d = new Date()) => d.toISOString().slice(0, 13).replace(/[-T]/g, "");
 
 async function add<N extends QueueName>(name: N, data: JobPayloads[N], opts: JobsOptions = {}) {
   return getQueue(name).add(name as never, data as never, opts);
 }
 
-/** Enqueue helpers with deterministic IDs. */
+/** Deterministic job IDs for proposal work: retries of the same job coalesce; a new proposal never reuses an old ID. */
+export const expansionJobId = (proposalId: string, part: string) => `x-${proposalId}-${part}`.replace(/:/g, "-");
+
+/**
+ * Producer-side approval check: the proposal must be RUNNING, the job ID registered on it, and the scope hash must
+ * match. (The executing service checks again — this is defence in depth, not the only gate.)
+ */
+async function assertDispatchable(auth: ExpansionAuth, jobId: string) {
+  const p = await db.expansionProposal.findUnique({ where: { id: auth.proposalId }, select: { status: true, scopeHash: true, jobIds: true } });
+  if (!p || p.status !== "RUNNING" || p.scopeHash !== auth.scopeHash || !p.jobIds.includes(jobId)) {
+    throw new AppError("FORBIDDEN", `Job ${jobId} is not authorized by an approved, running proposal`);
+  }
+}
+
+/** The only way to enqueue corpus-expanding work. */
+export async function enqueueExpansion<N extends ExpansionQueue>(name: N, data: Omit<JobPayloads[N], "requestId">, jobId: string) {
+  await assertDispatchable((data as Authorized).auth, jobId);
+  const lane = (data as Authorized).lane;
+  return add(name, { ...data, requestId: currentRequestId() } as JobPayloads[N], { jobId, priority: name === "backfill-history" ? 20 : lane === "interactive" ? 1 : 10 });
+}
+
+/** Enqueue helpers for local processing (no YouTube collection) — deterministic IDs coalesce duplicates. */
 export const enqueue = {
-  ingest: (p: Omit<JobPayloads["ingest-channel"], "requestId">) =>
-    add(
-      QUEUES.ingest,
-      { ...p, requestId: currentRequestId() },
-      { jobId: `ingest-${p.youtubeId}${p.full ? "-full" : ""}`, priority: p.lane === "interactive" ? 1 : 10 },
-    ),
-  sync: (channelId: string, lane: Lane = "background", requestedBy?: string) =>
-    add(
-      QUEUES.sync,
-      { channelId, lane, requestedBy, requestId: currentRequestId() },
-      { jobId: `sync-${channelId}-${hourStamp()}${lane === "interactive" ? `-m${Date.now()}` : ""}`, priority: lane === "interactive" ? 1 : 10 },
-    ),
-  stats: (videoIds: string[]) => add(QUEUES.stats, { videoIds }, { jobId: `stats-${hashIds(videoIds)}-${hourStamp()}` }),
-  transcript: (videoId: string, provider: string) => add(QUEUES.transcript, { videoId, provider }, { jobId: `tx-${videoId}` }),
+  /** Transcript fetches run under the approval of the collection that found the video (registered as a child job). */
+  transcript: (videoId: string, provider: string, connectionId: string | undefined, auth: ExpansionAuth, jobId: string) =>
+    add(QUEUES.transcript, { videoId, provider, connectionId, auth }, { jobId }),
   embed: (entity: JobPayloads["embed"]["entity"], ids: string[]) =>
     ids.length ? add(QUEUES.embed, { entity, ids }, { jobId: `embed-${entity}-${hashIds(ids)}` }) : null,
   topics: (videoIds: string[]) => (videoIds.length ? add(QUEUES.topics, { videoIds }, { jobId: `topics-${hashIds(videoIds)}` }) : null),

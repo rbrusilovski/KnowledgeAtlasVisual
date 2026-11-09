@@ -13,6 +13,7 @@ import { getVector, setVector, normalize, toVectorLiteral } from "@/server/db/ve
 import { normalizePhrase, tokenize, singularize } from "@/server/services/topics";
 import { aiEnabled, rerankNiche } from "@/server/services/ai";
 import { TAXONOMY } from "@/server/taxonomy";
+import { allowed as policyAllows } from "@/server/youtube/policy";
 
 export const WEIGHTS = { embedding: 0.55, keyword: 0.25, topic: 0.2 } as const;
 const MAX_LABELS = 3;
@@ -141,6 +142,8 @@ export async function scoreChannel(channelId: string) {
 }
 
 async function updateCentroid(nicheId: string, channelId: string, vec: number[]) {
+  // Learning a shared centroid from member channels aggregates across content owners (policy-gated for live data).
+  if (!policyAllows("cross-owner-aggregation")) return;
   const added = await redis.sadd(key("centroid", "contrib", nicheId), channelId);
   if (!added) return;
   const row = await db.niche.findUnique({ where: { id: nicheId }, select: { centroidCount: true } });
@@ -160,6 +163,7 @@ export async function recomputeNicheCounts() {
 }
 
 export async function classifyChannel(channelId: string): Promise<{ assignments: Assignment[]; manual: boolean } | null> {
+  if (!policyAllows("derived-data")) return null;
   const manual = await db.channelNiche.findMany({ where: { channelId, method: "MANUAL" }, select: { nicheId: true } });
   const ch = await db.channel.findUnique({ where: { id: channelId }, select: { youtubeId: true } });
   if (!ch) return null;

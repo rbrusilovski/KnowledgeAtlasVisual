@@ -8,7 +8,12 @@ export const AddChannelBody = z.object({
 });
 export type AddChannelBody = z.infer<typeof AddChannelBody>;
 
-export const SyncChannelBody = z.object({ full: z.boolean().optional() });
+/** Propose a sync (new uploads) or, with `full`, a bounded history backfill. Nothing runs until approved. */
+export const SyncChannelBody = z.object({
+  full: z.boolean().optional(),
+  maxPages: z.number().int().min(1).max(200).optional(),
+  maxVideos: z.number().int().min(1).max(5_000).optional(),
+});
 
 export const ChannelListQuery = z.object({
   niche: z.string().max(80).optional(),

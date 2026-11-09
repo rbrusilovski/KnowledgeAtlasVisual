@@ -46,6 +46,15 @@ const serverSchema = z
     AI_DAILY_TOKEN_BUDGET: int(200_000),
     FEATURE_YOUTUBE_OAUTH: bool(false),
     TRANSCRIPT_THIRD_PARTY_ENABLED: bool(false),
+    /** Policy gates for LIVE YouTube data (ignored in fixture mode). See docs/COMPLIANCE_DECISIONS.md. */
+    YOUTUBE_LIVE_COLLECTION_ENABLED: bool(false),
+    YOUTUBE_CROSS_OWNER_AGGREGATION_APPROVED: bool(false),
+    YOUTUBE_DERIVED_METRICS_AMENDMENT_ACCEPTED: bool(false),
+    /** Expansion proposals: how long a pending proposal can be approved, and how long an approval may execute. */
+    PROPOSAL_TTL_HOURS: int(72),
+    PROPOSAL_EXECUTION_DAYS: int(7),
+    /** Compliance: refresh proposals are raised this many days before an API-data retention deadline. */
+    COMPLIANCE_REFRESH_LEAD_DAYS: int(5),
     CLASSIFY_MIN_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.35),
     RATE_LIMIT_ANON_PER_MIN: int(60),
     RATE_LIMIT_USER_PER_MIN: int(300),

@@ -16,6 +16,7 @@ import { log } from "@/server/logger";
 import { getVector, normalize, setVector } from "@/server/db/vector";
 import { getProvider } from "@/server/services/embeddings";
 import { slugify } from "@/server/services/topics";
+import { allowed as policyAllows } from "@/server/youtube/policy";
 
 export interface SuggestionChannel {
   id: string;
@@ -51,6 +52,7 @@ const titleCase = (s: string) => s.replace(/\b\w/g, (m) => m.toUpperCase());
 export const suggestionId = (channelIds: string[]) => createHash("sha1").update([...channelIds].sort().join(",")).digest("hex").slice(0, 12);
 
 export async function suggestSubniches(opts: SuggestOptions = {}): Promise<SubnicheSuggestion[]> {
+  if (!policyAllows("cross-owner-aggregation")) return [];
   const maxConf = opts.maxConfidence ?? Math.min(0.6, env.CLASSIFY_MIN_CONFIDENCE + 0.2);
   const minSize = opts.minClusterSize ?? 3;
   const minSim = opts.minSimilarity ?? (getProvider().name.startsWith("local") ? 0.45 : 0.15);

@@ -13,7 +13,8 @@ const { redis } = await import("@/server/redis");
 const { auth } = await import("@/server/auth");
 const { seedTaxonomy } = await import("@/server/services/classification");
 const { embedEntities } = await import("@/server/services/embeddings");
-const { enqueue, getQueue, QUEUES, closeQueues } = await import("@/server/jobs");
+const { getQueue, QUEUES, closeQueues } = await import("@/server/jobs");
+const { createProposal, approveProposal } = await import("@/server/services/expansion");
 const { startWorkers } = await import("@/worker/processors");
 
 const log = (...a: unknown[]) => console.log("[seed]", ...a);
@@ -70,9 +71,21 @@ async function main() {
     const ci = process.argv.indexOf("--channels");
     const limit = ci >= 0 ? Number(process.argv[ci + 1]) : index.channels.length;
     // --channels N ingests the first N (in subniche order, so several niches are covered); the rest stay discoverable.
-    const pick = index.channels.slice(0, limit);
-    for (const c of pick) await enqueue.ingest({ youtubeId: c.id, lane: "background" });
-    log(`enqueued ${pick.length} fictional demo channels`);
+    const have = new Set((await db.channel.findMany({ select: { youtubeId: true } })).map((c) => c.youtubeId));
+    const pick = index.channels.slice(0, limit).filter((c) => !have.has(c.id));
+    // Fixture data still goes through the approval system: the CLI operator proposes and approves the load
+    // (CLI approvals are refused outside fixture mode — real data always needs approval in the Atlas UI).
+    const demo = await db.user.findUniqueOrThrow({ where: { email: demoEmail }, select: { id: true } });
+    for (let i = 0; i < pick.length; i += 100) {
+      const batch = pick.slice(i, i + 100);
+      const cli = { kind: "cli" as const, userId: demo.id };
+      const p = await createProposal(
+        { scope: { kind: "ADD_CHANNELS", channels: batch.map((c) => ({ youtubeId: c.id, aliases: [] })), maxVideosPerChannel: env.INGEST_MAX_VIDEOS_PER_CHANNEL, includeTranscripts: true }, reason: "pnpm db:seed — fictional demo dataset", title: `Seed ${batch.length} demo channels` },
+        cli,
+      );
+      await approveProposal(p.id, cli, p.scopeHash, "approved by the CLI operator running pnpm db:seed (fixture mode)");
+    }
+    log(`approved + dispatched ${pick.length} fictional demo channels`);
     await drainAll();
   } finally {
     await Promise.all(workers.map((w) => w.close()));

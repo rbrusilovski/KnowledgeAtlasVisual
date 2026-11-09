@@ -5,6 +5,7 @@
  */
 import { db, Prisma } from "@/server/db";
 import { embedQuery, getProvider } from "@/server/services/embeddings";
+import { visibleSql, type Viewer } from "@/server/services/transcripts";
 import { toVectorLiteral } from "@/server/db/vector";
 import { decodeCursor, encodeCursor } from "@/server/http/cursor";
 import type { SearchHit, SearchMode, SearchType, SuggestItem } from "@/shared/contracts/search";
@@ -71,6 +72,8 @@ export interface VideoFilter {
   minViews?: number;
   maxViews?: number;
   hasTranscript?: boolean;
+  /** Whose private transcripts may appear in transcript hits (shared corpus is always visible). */
+  viewer?: Viewer;
 }
 
 type VideoRow = { id: string; youtubeId: string; title: string; thumbnailUrl: string | null; publishedAt: Date; views: bigint | null; durationSec: number | null; hasTranscript: boolean; channelTitle: string; channelYt: string; hl?: string; rank: number };
@@ -168,7 +171,7 @@ async function keywordTranscripts(q: string, n: number, f: VideoFilter = {}): Pr
       ts_headline('english', tc.text, websearch_to_tsquery('english', ${q}), ${HL}) AS text,
       ts_rank_cd(tc."searchVector", websearch_to_tsquery('english', ${q})) AS rank
     FROM "TranscriptChunk" tc JOIN "Transcript" t ON t.id = tc."transcriptId" JOIN "Video" v ON v.id = t."videoId" JOIN "Channel" c ON c.id = v."channelId"
-    WHERE tc."searchVector" @@ websearch_to_tsquery('english', ${q}) AND ${videoFilters(f)}
+    WHERE tc."searchVector" @@ websearch_to_tsquery('english', ${q}) AND ${visibleSql(f.viewer ?? { userId: null })} AND ${videoFilters(f)}
     ORDER BY rank DESC LIMIT ${n * 3}`;
   return groupTranscriptHits(rows).slice(0, n);
 }
@@ -210,7 +213,7 @@ async function semanticTranscripts(vec: string, n: number, f: VideoFilter = {}):
     SELECT x.*, meta.* FROM (
       SELECT tc.id AS "chunkId", t."videoId", tc."startSec", tc."endSec", tc.text, 1 - (tc.embedding <=> ${vec}::vector) AS rank
       FROM "TranscriptChunk" tc JOIN "Transcript" t ON t.id = tc."transcriptId"
-      WHERE tc.embedding IS NOT NULL ORDER BY tc.embedding <=> ${vec}::vector LIMIT ${n * 6}
+      WHERE tc.embedding IS NOT NULL AND ${visibleSql(f.viewer ?? { userId: null })} ORDER BY tc.embedding <=> ${vec}::vector LIMIT ${n * 6}
     ) x JOIN LATERAL (
       SELECT v."youtubeId", v.title, v."thumbnailUrl", c.title AS "channelTitle", c."youtubeId" AS "channelYt"
       FROM "Video" v JOIN "Channel" c ON c.id = v."channelId" WHERE v.id = x."videoId" AND ${videoFilters(f)}
@@ -369,13 +372,13 @@ async function videoFacets(channelId: string) {
   };
 }
 
-/** In-transcript search for one video (video page). */
-export async function searchInTranscript(videoId: string, q: string) {
+/** In-transcript search within one transcript the caller has already been authorized to read. */
+export async function searchInTranscript(transcriptId: string, q: string) {
   return db.$queryRaw<{ id: string; idx: number; startSec: number; endSec: number; text: string; rank: number }[]>`
     SELECT tc.id, tc.idx, tc."startSec", tc."endSec",
       ts_headline('english', tc.text, websearch_to_tsquery('english', ${q}), 'StartSel=<mark>, StopSel=</mark>, HighlightAll=true') AS text,
       ts_rank_cd(tc."searchVector", websearch_to_tsquery('english', ${q})) AS rank
     FROM "TranscriptChunk" tc JOIN "Transcript" t ON t.id = tc."transcriptId"
-    WHERE t."videoId" = ${videoId} AND (tc."searchVector" @@ websearch_to_tsquery('english', ${q}) OR tc.text ILIKE ${`%${q.replace(/[%_\\]/g, "")}%`})
+    WHERE t.id = ${transcriptId} AND (tc."searchVector" @@ websearch_to_tsquery('english', ${q}) OR tc.text ILIKE ${`%${q.replace(/[%_\\]/g, "")}%`})
     ORDER BY tc.idx`;
 }

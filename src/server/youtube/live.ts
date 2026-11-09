@@ -55,9 +55,10 @@ export class LiveYouTubeClient implements RawYouTubeClient {
     const r = await this.call(
       "channels",
       {
-        part: "snippet,statistics,contentDetails,brandingSettings,topicDetails",
+        // Quota cost is per call (1 unit) regardless of parts, so request every public part Atlas uses.
+        part: "snippet,statistics,contentDetails,brandingSettings,topicDetails,status,localizations",
         fields:
-          "items(id,etag,snippet(title,description,customUrl,publishedAt,country,thumbnails(default,medium,high)),statistics,contentDetails(relatedPlaylists(uploads)),brandingSettings(channel(keywords)),topicDetails(topicCategories))",
+          "items(id,etag,snippet(title,description,customUrl,publishedAt,country,defaultLanguage,localized,thumbnails),statistics,contentDetails(relatedPlaylists(uploads)),brandingSettings(channel(keywords,unsubscribedTrailer,defaultLanguage,country)),topicDetails(topicIds,topicCategories),status(privacyStatus,isLinked,madeForKids),localizations)",
         id: p.ids?.join(","),
         forHandle: p.forHandle,
         forUsername: p.forUsername,
@@ -72,8 +73,8 @@ export class LiveYouTubeClient implements RawYouTubeClient {
     const r = await this.call(
       "playlistItems",
       {
-        part: "contentDetails",
-        fields: "nextPageToken,pageInfo(totalResults),items(contentDetails(videoId,videoPublishedAt))",
+        part: "contentDetails,status",
+        fields: "nextPageToken,pageInfo(totalResults),items(contentDetails(videoId,videoPublishedAt),status(privacyStatus))",
         playlistId,
         maxResults: MAX_PAGE_SIZE,
         pageToken,
@@ -81,7 +82,7 @@ export class LiveYouTubeClient implements RawYouTubeClient {
       ytPlaylistItems,
     );
     return {
-      items: r.items.map((i) => ({ videoId: i.contentDetails.videoId, publishedAt: i.contentDetails.videoPublishedAt })),
+      items: r.items.map((i) => ({ videoId: i.contentDetails.videoId, publishedAt: i.contentDetails.videoPublishedAt, privacyStatus: i.status?.privacyStatus })),
       nextPageToken: r.nextPageToken,
       totalResults: r.pageInfo?.totalResults,
     };
@@ -93,9 +94,9 @@ export class LiveYouTubeClient implements RawYouTubeClient {
     const r = await this.call(
       "videos",
       {
-        part: "snippet,contentDetails,statistics",
+        part: "snippet,contentDetails,statistics,status,topicDetails,liveStreamingDetails,localizations",
         fields:
-          "items(id,etag,snippet(channelId,title,description,publishedAt,tags,categoryId,defaultLanguage,defaultAudioLanguage,thumbnails(medium,high)),contentDetails(duration,caption),statistics(viewCount,likeCount,commentCount))",
+          "items(id,etag,snippet(channelId,channelTitle,title,description,publishedAt,tags,categoryId,defaultLanguage,defaultAudioLanguage,liveBroadcastContent,localized,thumbnails),contentDetails(duration,dimension,definition,caption,licensedContent,projection,regionRestriction,contentRating),status(uploadStatus,privacyStatus,license,embeddable,publicStatsViewable,madeForKids),statistics(viewCount,likeCount,commentCount),topicDetails(topicCategories,relevantTopicIds),liveStreamingDetails(scheduledStartTime,actualStartTime,actualEndTime),localizations)",
         id: ids.join(","),
         maxResults: MAX_PAGE_SIZE,
       },

@@ -57,43 +57,141 @@ enum Role {
   ADMIN
 }
 
+enum TranscriptVisibility {
+  PRIVATE // only the owner (uploader / authorizing user)
+  CORPUS // shared corpus (fixture/demo only today)
+}
+
+enum TranscriptKind {
+  MANUAL
+  ASR
+  UPLOADED
+  FIXTURE
+}
+
+enum TranscriptStatus {
+  NOT_CHECKED
+  PENDING
+  AVAILABLE
+  NOT_AVAILABLE
+  FAILED
+  REQUIRES_USER_UPLOAD
+  NOT_ELIGIBLE_OWNER_CAPTIONS
+}
+
+enum CoverageGroup {
+  IDENTITY
+  TEXT
+  CHANNEL_PROFILE
+  THUMBNAILS
+  PUBLICATION
+  STATISTICS
+  STATUS
+  TRANSCRIPT
+}
+
+enum CoverageStatus {
+  PRESENT
+  NOT_RETURNED
+  UNAVAILABLE
+  NOT_APPLICABLE
+  NOT_REQUESTED
+  STALE
+  ERROR
+  EXPIRED
+}
+
+enum RetentionClass {
+  API_METADATA
+  API_STATISTICS
+  AUTHORIZED_DATA
+  USER_CONTENT
+  FIXTURE
+}
+
+enum HistoryState {
+  NOT_STARTED
+  INITIAL_WINDOW_COLLECTED
+  BACKFILL_IN_PROGRESS
+  PAUSED_AWAITING_APPROVAL
+  COMPLETE_TO_SOURCE_LIMIT
+  FAILED_RETRYABLE
+  SOURCE_UNAVAILABLE
+}
+
+enum ProposalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ProposalSource {
+  USER
+  CLAUDE
+  SYSTEM
+  CLI
+}
+
+enum ExpansionKind {
+  ADD_CHANNELS
+  DISCOVER_CHANNELS
+  BACKFILL_HISTORY
+  SYNC_UPLOADS
+  REFRESH_METADATA
+}
+
 // ───────────────────────────── YouTube corpus ─────────────────────────────
 
 model Channel {
-  id                    String                    @id @default(cuid())
-  youtubeId             String                    @unique
-  handle                String?                   @unique
+  id                    String                      @id @default(cuid())
+  youtubeId             String                      @unique
+  handle                String?                     @unique
   title                 String
-  description           String                    @default("")
+  description           String                      @default("")
   customUrl             String?
   country               String?
   publishedAt           DateTime?
   thumbnailUrl          String?
+  /// All thumbnail variants [{ variant, url, width, height }] (see youtube/normalize.ts)
+  thumbnails            Json                        @default("[]")
+  defaultLanguage       String?
+  localizations         Json?
   keywords              String[]
   topicCategories       String[]
+  topicIds              String[]
+  madeForKids           Boolean?
+  privacyStatus         String?
+  isLinked              Boolean?
+  trailerVideoId        String?
   subscriberCount       BigInt?
-  hiddenSubscriberCount Boolean                   @default(false)
+  hiddenSubscriberCount Boolean                     @default(false)
   videoCount            Int?
   viewCount             BigInt?
   uploadsPlaylistId     String?
   etag                  String?
-  syncTier              SyncTier                  @default(WARM)
+  syncTier              SyncTier                    @default(WARM)
   lastSyncedAt          DateTime?
   lastStatsAt           DateTime?
   lastRefreshedAt       DateTime?
   lastViewedAt          DateTime?
   latestVideoAt         DateTime?
-  backfillPageToken     String?
   featuredChannelIds    String[]
-  isAvailable           Boolean                   @default(true)
+  isAvailable           Boolean                     @default(true)
   embeddingHash         String?
   embedding             Unsupported("vector(384)")?
   searchVector          Unsupported("tsvector")?
   videos                Video[]
   niches                ChannelNiche[]
   aliases               ChannelAlias[]
-  createdAt             DateTime                  @default(now())
-  updatedAt             DateTime                  @updatedAt
+  history               UploadHistory?
+  coverage              FieldCoverage[]
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
 
   @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "Channel_title_trgm_idx")
   @@index([handle(ops: raw("gin_trgm_ops"))], type: Gin, map: "Channel_handle_trgm_idx")
@@ -112,35 +210,61 @@ model ChannelAlias {
 }
 
 model Video {
-  id              String                      @id @default(cuid())
-  youtubeId       String                      @unique
-  channelId       String
-  title           String
-  description     String                      @default("")
-  publishedAt     DateTime
-  durationSec     Int?
-  tags            String[]
-  categoryId      String?
-  defaultLanguage String?
-  thumbnailUrl    String?
-  viewCount       BigInt?
-  likeCount       BigInt?
-  commentCount    BigInt?
-  isShort         Boolean                     @default(false)
-  etag            String?
-  lastStatsAt     DateTime?
-  lastRefreshedAt DateTime?
-  isAvailable     Boolean                     @default(true)
-  hasTranscript   Boolean                     @default(false)
-  topicsAt        DateTime?
-  embeddingHash   String?
-  embedding       Unsupported("vector(384)")?
-  searchVector    Unsupported("tsvector")?
-  channel         Channel                     @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  transcript      Transcript?
-  topics          VideoTopic[]
-  createdAt       DateTime                    @default(now())
-  updatedAt       DateTime                    @updatedAt
+  id                   String                      @id @default(cuid())
+  youtubeId            String                      @unique
+  channelId            String
+  title                String
+  description          String                      @default("")
+  publishedAt          DateTime
+  durationSec          Int?
+  tags                 String[]
+  categoryId           String?
+  channelTitle         String?
+  defaultLanguage      String?
+  defaultAudioLanguage String?
+  thumbnailUrl         String?
+  thumbnails           Json                        @default("[]")
+  liveBroadcastContent String?
+  liveScheduledStartAt DateTime?
+  liveActualStartAt    DateTime?
+  liveActualEndAt      DateTime?
+  definition           String?
+  dimension            String?
+  projection           String?
+  /// contentDetails.caption: whether YouTube reports caption tracks exist (not whether Atlas can access them)
+  captionFlag          Boolean?
+  licensedContent      Boolean?
+  regionRestriction    Json?
+  contentRating        Json?
+  privacyStatus        String?
+  uploadStatus         String?
+  license              String?
+  embeddable           Boolean?
+  publicStatsViewable  Boolean?
+  madeForKids          Boolean?
+  topicCategories      String[]
+  localizations        Json?
+  viewCount            BigInt?
+  likeCount            BigInt?
+  commentCount         BigInt?
+  isShort              Boolean                     @default(false)
+  etag                 String?
+  lastStatsAt          DateTime?
+  lastRefreshedAt      DateTime?
+  isAvailable          Boolean                     @default(true)
+  /// A CORPUS-visible transcript exists (private transcripts never set this).
+  hasTranscript        Boolean                     @default(false)
+  transcriptStatus     TranscriptStatus            @default(NOT_CHECKED)
+  topicsAt             DateTime?
+  embeddingHash        String?
+  embedding            Unsupported("vector(384)")?
+  searchVector         Unsupported("tsvector")?
+  channel              Channel                     @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  transcripts          Transcript[]
+  topics               VideoTopic[]
+  coverage             FieldCoverage[]
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
 
   @@index([channelId, publishedAt(sort: Desc)])
   @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "Video_title_trgm_idx")
@@ -149,16 +273,31 @@ model Video {
 }
 
 model Transcript {
-  id              String            @id @default(cuid())
-  videoId         String            @unique
+  id              String               @id @default(cuid())
+  videoId         String
   source          TranscriptSource
+  visibility      TranscriptVisibility @default(PRIVATE)
+  /// Uploading user (USER_UPLOAD) or authorizing user (OWNER_CAPTIONS). Null only for CORPUS transcripts.
+  ownerUserId     String?
+  /// ownerUserId ?? "corpus" — non-null so the uniqueness key works (NULLs are distinct in Postgres).
+  ownerKey        String
+  connectionId    String?
+  providerTrackId String?
   language        String
-  isAutoGenerated Boolean           @default(false)
+  trackKind       TranscriptKind
+  isAutoGenerated Boolean              @default(false)
   contentHash     String
-  fetchedAt       DateTime          @default(now())
-  uploadedById    String?
-  video           Video             @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  fetchedAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  video           Video                @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  owner           User?                @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  connection      YouTubeConnection?   @relation(fields: [connectionId], references: [id], onDelete: Cascade)
   chunks          TranscriptChunk[]
+
+  @@unique([videoId, source, language, ownerKey])
+  @@index([videoId, visibility])
+  @@index([ownerUserId])
+  @@index([connectionId])
 }
 
 model TranscriptChunk {
@@ -226,12 +365,16 @@ model Topic {
 }
 
 model VideoTopic {
-  videoId String
-  topicId String
-  weight  Float
-  source  String
-  video   Video  @relation(fields: [videoId], references: [id], onDelete: Cascade)
-  topic   Topic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  videoId     String
+  topicId     String
+  weight      Float
+  source      String
+  /// Which source fields / transcript chunks support the topic, extractor version, confidence
+  evidence    Json?
+  extractor   String?
+  extractedAt DateTime @default(now())
+  video       Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  topic       Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
   @@id([videoId, topicId])
   @@index([topicId, weight])
@@ -370,26 +513,129 @@ model IngestionRun {
   unitsUsed   Int       @default(0)
   searchCalls Int       @default(0)
   requestedBy String?
+  proposalId  String?
+  jobId       String?
+  scopeHash   String?
   startedAt   DateTime  @default(now())
   finishedAt  DateTime?
   error       String?
   stats       Json      @default("{}")
 
+  @@index([proposalId])
   @@index([targetId, startedAt(sort: Desc)])
   @@index([startedAt(sort: Desc)])
 }
 
 model YouTubeConnection {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  googleSub       String
-  channelIds      String[]
-  accessTokenEnc  String
-  refreshTokenEnc String?
-  scope           String
-  expiresAt       DateTime
-  createdAt       DateTime @default(now())
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String       @id @default(cuid())
+  userId           String       @unique
+  googleSub        String
+  channelIds       String[]
+  accessTokenEnc   String
+  refreshTokenEnc  String?
+  scope            String
+  expiresAt        DateTime
+  lastValidatedAt  DateTime?
+  lastRefreshError String?
+  createdAt        DateTime     @default(now())
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transcripts      Transcript[]
+}
+
+// ───────────────────── Coverage, history, governance ─────────────────────
+
+/// Field-group coverage for one channel or video: what was collected, when, why something is missing, and when it
+/// must be refreshed or deleted. Exactly one of channelId / videoId is set.
+model FieldCoverage {
+  id                String         @id @default(cuid())
+  channelId         String?
+  videoId           String?
+  group             CoverageGroup
+  status            CoverageStatus
+  source            String
+  reason            String?
+  details           Json?
+  retentionClass    RetentionClass
+  lastAttemptAt     DateTime
+  lastSuccessAt     DateTime?
+  retentionDeadline DateTime?
+  error             String?
+  updatedAt         DateTime       @updatedAt
+  channel           Channel?       @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  video             Video?         @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, group])
+  @@unique([videoId, group])
+  @@index([group, status])
+  @@index([retentionDeadline])
+}
+
+/// Checkpointed upload-history collection for a channel (uploads playlist, newest → oldest).
+model UploadHistory {
+  channelId         String       @id
+  state             HistoryState @default(NOT_STARTED)
+  /// Token of the next page to read (null = first page) + how many items of that page were already consumed.
+  nextPageToken     String?
+  pageOffset        Int          @default(0)
+  pagesScanned      Int          @default(0)
+  itemsSeen         Int          @default(0)
+  videosCollected   Int          @default(0)
+  unavailableCount  Int          @default(0)
+  oldestPublishedAt DateTime?
+  newestPublishedAt DateTime?
+  totalResults      Int?
+  lastPageAt        DateTime?
+  completedAt       DateTime?
+  lastError         String?
+  lastProposalId    String?
+  updatedAt         DateTime     @updatedAt
+  channel           Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+}
+
+/// A bounded, immutable request to expand or refresh the corpus. Executes only after explicit, single-use approval
+/// by a human; services, queue producers and workers all re-validate it (services/expansion).
+model ExpansionProposal {
+  id                   String         @id @default(cuid())
+  createdByUserId      String?
+  source               ProposalSource
+  kind                 ExpansionKind
+  targetType           String
+  targetIds            String[]
+  scope                Json
+  scopeHash            String
+  title                String
+  reason               String
+  coverageGap          String?
+  uncertainty          String?
+  estimatedChannels    Int
+  estimatedVideos      Int
+  estimatedQuota       Int
+  estimatedSearchCalls Int
+  status               ProposalStatus @default(PENDING)
+  expiresAt            DateTime
+  approvedByUserId     String?
+  approvedAt           DateTime?
+  decidedByUserId      String?
+  decidedAt            DateTime?
+  decisionNote         String?
+  executionDeadline    DateTime?
+  startedAt            DateTime?
+  finishedAt           DateTime?
+  jobIds               String[]
+  doneJobIds           String[]
+  failedJobIds         String[]
+  actualResults        Json           @default("{}")
+  actualQuota          Int            @default(0)
+  actualSearchCalls    Int            @default(0)
+  error                String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  createdBy            User?          @relation("ProposalCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  approvedBy           User?          @relation("ProposalApprover", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([createdByUserId, status])
+  @@index([kind, status])
 }
 
 model AiExtraction {
@@ -409,21 +655,24 @@ model AiExtraction {
 // ─────────────────────────────── Better Auth ──────────────────────────────
 
 model User {
-  id                String             @id
+  id                String              @id
   name              String
-  email             String             @unique
-  emailVerified     Boolean            @default(false)
+  email             String              @unique
+  emailVerified     Boolean             @default(false)
   image             String?
-  role              Role               @default(USER)
-  reducedMotion     Boolean            @default(false)
-  defaultLayout     String             @default("global")
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  role              Role                @default(USER)
+  reducedMotion     Boolean             @default(false)
+  defaultLayout     String              @default("global")
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
   sessions          Session[]
   accounts          Account[]
   workspaces        Workspace[]
   discoveryQueries  DiscoveryQuery[]
   youtubeConnection YouTubeConnection?
+  transcripts       Transcript[]
+  proposalsCreated  ExpansionProposal[] @relation("ProposalCreator")
+  proposalsApproved ExpansionProposal[] @relation("ProposalApprover")
 
   @@map("user")
 }

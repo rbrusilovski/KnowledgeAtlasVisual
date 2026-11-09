@@ -4,7 +4,7 @@
  */
 import { db, Prisma } from "@/server/db";
 import { AppError, notFound } from "@/server/errors";
-import { enqueue } from "@/server/jobs";
+import { ownedTranscripts, purgeConnectionTranscripts } from "@/server/services/transcripts";
 import { log } from "@/server/logger";
 import type { ViewState } from "@/shared/contracts/workspaces";
 
@@ -279,7 +279,7 @@ export async function exportUserData(userId: string) {
     select: { id: true, name: true, description: true, createdAt: true, collections: { select: { id: true, name: true, description: true, color: true, icon: true, items: { select: { nodeId: true, note: true, tags: true, addedAt: true } } } }, savedViews: { select: { name: true, state: true, createdAt: true } }, layouts: { select: { nodeId: true, x: true, y: true, pinned: true } } },
   });
   const discovery = await db.discoveryQuery.findMany({ where: { userId }, select: { query: true, nicheId: true, resultChannelIds: true, createdAt: true } });
-  const uploads = await db.transcript.findMany({ where: { uploadedById: userId }, select: { video: { select: { youtubeId: true, title: true } }, fetchedAt: true, language: true } });
+  const uploads = await ownedTranscripts(userId);
   const yt = await db.youTubeConnection.findUnique({ where: { userId }, select: { channelIds: true, scope: true, createdAt: true } });
   return { exportedAt: new Date().toISOString(), user, workspaces, discoveryQueries: discovery, transcriptUploads: uploads, youtubeConnection: yt };
 }
@@ -289,26 +289,23 @@ export async function deleteAccount(userId: string) {
   const nodes = await db.collectionItem.findMany({ where: { collection: { workspace: { ownerId: userId } } }, select: { nodeId: true } });
   const yt = await db.youTubeConnection.findUnique({ where: { userId }, select: { channelIds: true } });
   if (yt) await purgeYouTubeConnectionData(userId, yt.channelIds);
-  // Uploaded transcripts are personal contributions: remove them.
-  const uploaded = await db.transcript.findMany({ where: { uploadedById: userId }, select: { id: true, videoId: true } });
-  if (uploaded.length) {
-    await db.transcript.deleteMany({ where: { id: { in: uploaded.map((u) => u.id) } } });
-    await db.video.updateMany({ where: { id: { in: uploaded.map((u) => u.videoId) } }, data: { hasTranscript: false } });
-  }
+  // Private transcripts (uploads + owner captions) are personal: they cascade with the user (Transcript.owner).
   await db.discoveryQuery.deleteMany({ where: { userId } });
   await db.user.delete({ where: { id: userId } }); // sessions, accounts, workspaces → collections/items/views/layouts cascade
   await retier(nodes.map((n) => n.nodeId));
   log().info({ userId }, "account deleted");
 }
 
-/** Revoking the YouTube connection deletes owner-caption transcripts obtained through it. */
-export async function purgeYouTubeConnectionData(userId: string, channelIds: string[]) {
-  const tx = await db.transcript.findMany({ where: { source: "OWNER_CAPTIONS", video: { channel: { youtubeId: { in: channelIds } } } }, select: { id: true, videoId: true } });
-  if (tx.length) {
-    await db.transcript.deleteMany({ where: { id: { in: tx.map((t) => t.id) } } });
-    await db.video.updateMany({ where: { id: { in: tx.map((t) => t.videoId) } }, data: { hasTranscript: false } });
-    const vids = await db.video.findMany({ where: { id: { in: tx.map((t) => t.videoId) } }, select: { id: true } });
-    await enqueue.topics(vids.map((v) => v.id));
-  }
-  await db.youTubeConnection.deleteMany({ where: { userId } });
+/**
+ * Revoking the YouTube connection deletes the data obtained through THAT connection (Developer Policies III.D.2:
+ * within 7 days — Atlas does it immediately). Other users' owner captions for the same channel are untouched.
+ * Never gated by approval or policy flags.
+ */
+export async function purgeYouTubeConnectionData(userId: string, _channelIds: string[] = []) {
+  const conn = await db.youTubeConnection.findUnique({ where: { userId }, select: { id: true } });
+  if (!conn) return { deleted: 0 };
+  const r = await purgeConnectionTranscripts(conn.id);
+  await db.youTubeConnection.delete({ where: { id: conn.id } }); // transcripts also cascade on the connection
+  log().info({ userId, transcripts: r.deleted }, "youtube connection purged");
+  return r;
 }

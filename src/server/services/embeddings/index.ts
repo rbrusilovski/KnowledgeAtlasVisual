@@ -5,6 +5,7 @@ import { log } from "@/server/logger";
 import { enqueue } from "@/server/jobs";
 import { setVector } from "@/server/db/vector";
 import { getProvider } from "./providers";
+import { allowed as policyAllows } from "@/server/youtube/policy";
 
 export { getProvider, type EmbeddingProvider, HashProvider, LocalProvider } from "./providers";
 
@@ -58,6 +59,8 @@ export type EmbedEntity = "channel" | "video" | "topic" | "chunk" | "niche";
 export async function embedEntities(entity: EmbedEntity, ids: string[]): Promise<{ embedded: number; skipped: number }> {
   let embedded = 0;
   let skipped = 0;
+  // Embeddings of API Data are derived data (policy-gated for live data). Niche centroids come from Atlas's own taxonomy.
+  if (entity !== "niche" && !policyAllows("derived-data")) return { embedded: 0, skipped: ids.length };
   if (entity === "channel") {
     for (const id of ids) {
       const c = await db.channel.findUnique({ where: { id }, select: { id: true, title: true, handle: true, description: true, keywords: true, embeddingHash: true, youtubeId: true } });

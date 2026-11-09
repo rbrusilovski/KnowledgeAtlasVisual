@@ -1,7 +1,7 @@
 import type { YtChannel, YtVideo } from "./schemas";
 
 export interface PlaylistPage {
-  items: { videoId: string; publishedAt?: string }[];
+  items: { videoId: string; publishedAt?: string; privacyStatus?: string }[];
   nextPageToken?: string;
   totalResults?: number;
 }

@@ -2,7 +2,7 @@ import type { Redis } from "ioredis";
 import { redis, key, createRedis } from "@/server/redis";
 import { log } from "@/server/logger";
 
-export type EventType = "job.progress" | "job.completed" | "job.failed" | "graph.delta" | "quota.updated";
+export type EventType = "job.progress" | "job.completed" | "job.failed" | "graph.delta" | "quota.updated" | "proposal.created" | "proposal.updated";
 
 export interface AtlasEvent {
   type: EventType;

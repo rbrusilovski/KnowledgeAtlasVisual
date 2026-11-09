@@ -1,18 +1,18 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Worker } from "bullmq";
 import { db } from "@/server/db";
-import * as ingestion from "@/server/services/ingestion";
 import { seedTaxonomy } from "@/server/services/classification";
 import { embedEntities } from "@/server/services/embeddings";
 import { getSubgraph, getDelta, currentVersion, relatedCreators, findPath } from "@/server/services/graph";
 import { knn, getVector } from "@/server/db/vector";
 import { GraphQuery } from "@/shared/contracts/graph";
 import { startWorkers } from "@/worker/processors";
-import { resetDb, flushRedis, drain, teardown, noopCtl, setServed } from "./helpers";
+import { resetDb, flushRedis, drain, teardown, setServed, approved, makeUser } from "./helpers";
 
 // Three channels: two baking-adjacent, one devops — enough for topics, niches, similarity and edges.
 let channels: string[] = [];
 let workers: Worker[] = [];
+let owner: Awaited<ReturnType<typeof makeUser>>;
 
 async function pickFixtureChannels() {
   const { readFileSync } = await import("node:fs");
@@ -32,7 +32,8 @@ beforeAll(async () => {
   workers = startWorkers();
   setServed(workers);
   channels = await pickFixtureChannels();
-  for (const yt of channels) await ingestion.ingestChannel({ youtubeId: yt, lane: "interactive" }, noopCtl);
+  owner = await makeUser("pipeline@atlas.test");
+  await approved({ kind: "ADD_CHANNELS", channels: channels.map((youtubeId) => ({ youtubeId, aliases: [] })), maxVideosPerChannel: 300, includeTranscripts: true }, owner);
   await drain(240_000);
 }, 300_000);
 
@@ -115,7 +116,7 @@ describe("intelligence + graph pipeline (fixture mode)", () => {
     const { readFileSync } = await import("node:fs");
     const idx = JSON.parse(readFileSync("fixtures/youtube/index.json", "utf8")) as { channels: { id: string; subniche: string }[] };
     const extra = idx.channels.find((c) => c.subniche === "baking" && !channels.includes(c.id)) ?? idx.channels.find((c) => !channels.includes(c.id))!;
-    await ingestion.ingestChannel({ youtubeId: extra.id, lane: "interactive" }, noopCtl);
+    await approved({ kind: "ADD_CHANNELS", channels: [{ youtubeId: extra.id, aliases: [] }], maxVideosPerChannel: 300, includeTranscripts: true }, owner);
     await drain(240_000);
     const d = await getDelta(before);
     expect(BigInt(d.toVersion)).toBeGreaterThan(before);

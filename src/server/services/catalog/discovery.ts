@@ -1,7 +1,7 @@
 import { db } from "@/server/db";
 import { AppError, notFound } from "@/server/errors";
 import { enqueue } from "@/server/jobs";
-import { youtube, withYouTubeContext, costOf, bestThumb } from "@/server/youtube";
+import { youtube, withYouTubeContext, costOf, bestThumb, policyAllows } from "@/server/youtube";
 import { reserveUserDiscovery, refundUserDiscovery, usage } from "@/server/services/quota";
 import { embedTexts } from "@/server/services/embeddings";
 import { toVectorLiteral } from "@/server/db/vector";
@@ -90,7 +90,8 @@ async function runSearches(queries: string[], opts: { userId: string; nicheId?: 
   await db.discoveryQuery.create({ data: { userId: opts.userId, query: queries.join(" | "), nicheId: opts.nicheId, resultChannelIds: results.map((r) => r.youtubeId) } });
   // CO_DISCOVERED edges for result channels already in the atlas.
   const present = results.filter((r) => r.inAtlas).map((r) => `channel:${r.youtubeId}`);
-  if (present.length > 1) await enqueue.graph(present);
+  // Cross-owner relation: policy-gated for live data. Discovery previews never add channels to the corpus.
+  if (present.length > 1 && policyAllows("cross-owner-aggregation")) await enqueue.graph(present);
   return { query: queries.join(" | "), results, quotaUsed: spent, cached: spent.search === 0, quota: (await usage()).buckets };
 }
 

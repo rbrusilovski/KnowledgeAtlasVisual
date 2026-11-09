@@ -1,61 +1,87 @@
 # Progress
 
-Source of truth: `BUILD_SPEC.md`. Phases follow §16.
+Sources of truth: `BUILD_SPEC.md` (architecture, design system, original requirements) and
+`YouTube_Knowledge_Atlas_Prompt.md` (YouTube collection, coverage, approval and expansion — more recent, wins on
+conflict). Compliance: `docs/COMPLIANCE_DECISIONS.md`. Decisions: `docs/DECISIONS.md`.
 
-## Plan
-0. Foundations (Next 16, Tailwind v4, Prisma + custom SQL, env, withRoute, shell, CLAUDE.md)
-1. YouTube layer (live + fixture client, costs, quota, cache, resolver, fixture generator, yt:probe)
-2. Ingestion & workers (BullMQ queues/processors, sync tiers, scheduler, dedup, IngestionRun, SSE)
-3. Intelligence (embeddings, transcripts, topics, classification, optional AI)
-4. Graph (builder, edges, communities, traversal, delta, related creators)
-5. Search (keyword, fuzzy, semantic, hybrid, channel-scoped)
-6. Auth & personal layer (Better Auth, workspaces, collections, views, layouts, rate limits, export/delete)
-7. Atlas UI (sigma canvas, layout worker, interactions, filters, inspector, ⌘K, live updates, list view)
-8. Pages (discover, channel, video, collections, search, settings, admin, landing, legal)
-9. Polish & hardening (motion, states, a11y, perf, README, CI)
+---
 
-## Status
-- [x] Phase 0 — Foundations (Next 16.4, Tailwind v4 tokens, ESLint module boundaries, Zod env, Prisma + hand-written SQL, withRoute, health). Drift-free.
-- [x] Phase 1 — YouTube layer: live/fixture clients, costs.ts, quota buckets+lanes (Lua), cache (SWR), resolver, fixture generator (60 fictional channels), yt:probe.
-- [x] Phase 2 — Ingestion & workers: BullMQ queues/processors, initial ingest, incremental sync, tiers/scheduler, stats, compliance, retries/quota delay, SSE with Last-Event-ID.
-- [x] Phase 3 — Intelligence: embeddings (local MiniLM / hash / remote), transcripts (providers, VTT/SRT/TXT parse, chunking), TF-IDF topics + canonicalization, classification, optional AI.
-- [x] Phase 4 — Graph: all edge kinds, provenance-exact incremental builds, Louvain, global/local traversal (Redis-cached by version), neighbors, delta, related creators, path.
-- [x] Phase 5 — Search: keyword/fuzzy/semantic/hybrid (RRF), channel-scoped facets, transcript deep links. suggest ≈ 3 ms warm.
-- [x] Phase 6 — Personal layer: workspaces/collections/items/views/layouts, export (JSON/CSV), account deletion, rate limits, security headers, IDOR tests.
-- [x] Phase 7 — Atlas UI: sigma 4 canvas, FA2 worker layout, hover-highlight, select, box-select, drag-to-pin (persisted),
-  expand/collapse, context menu, filters via reducers (URL state), clustering labels, local mode, inspector, hover cards,
-  ⌘K palette with search-to-focus, live graph deltas, list view, status bar.
-- [x] Phase 8 — Pages: landing, sign-in, discover, channel, video, collections (+detail), search, settings, admin,
-  privacy/terms templates, /dev/graph-bench.
-- [x] Phase 9 — Polish & hardening: README, GitHub Actions CI, e2e (10/10), production build, client-bundle secret
-  check (no secret values; only Better Auth's isomorphic env-getter references the name), hydration fixes,
-  graph-bench 60 FPS at 5k/19k and 10k/38k (headless Chromium).
+## Round 2 — collection, approval, coverage, compliance (started 2026-11-09)
 
-- [x] Spec-gap pass: default-layout + reduced-motion preferences wired; discover region/language; suggested
-  subniches (service, admin UI, accept/dismiss, integration test); "Load demo dataset" action; SWR on UI reads;
-  status bar last sync; bull-board proxy verified; Docker prod build fixed (placeholders at build time).
+### Gap audit (verified in source, 2026-11-09)
 
-## Definition of Done
-- [x] Fresh clone → README steps → working fixture-mode app with the demo dataset.
-- [x] `YOUTUBE_MODE=live` + key uses the live client with no code changes (live client covered by unit tests; not run
-      against the real API here — no key was available).
-- [x] Atlas: zoom, pan, drag+pin (persisted), hover highlight, expand/collapse, clustering, filters, local mode, list
-      view, hover cards, inspector.
-- [x] Search: hybrid/keyword/semantic across types; within-channel; transcript hits deep-link to timestamps.
-- [x] Collections, saved views, layouts persist per user and are isolated (IDOR tests).
-- [x] Background sync on schedule, quota lanes, retries, pause on exhaustion, 30-day compliance (integration tests).
-- [x] Real-time: newly ingested channels appear in an open atlas without reload (e2e).
-- [x] Quota usage visible in the UI; costly actions confirm before spending searches.
-- [x] No secrets in the client bundle.
-- [x] typecheck, lint, test, test:integration, e2e, build all pass.
+Legend: CONFIRMED (finding reproduced) · PARTIALLY_PRESENT · NOT_PRESENT · NOT_REPRODUCIBLE
 
-Tests: 92 unit, 32 integration, 10 Playwright e2e — all passing.
+| # | Area | Finding | Verdict | Evidence |
+|---|---|---|---|---|
+| 1 | Transcript endpoint | `GET /api/videos/:id/transcript` is `auth: "none"` and returns any stored transcript | **CONFIRMED** | `src/app/api/videos/[id]/transcript/route.ts` |
+| 1b | Transcript leakage elsewhere | Global search (keyword + semantic transcript hits), in-video search, video DTO, topic extraction and AI extraction all read every transcript regardless of owner | **CONFIRMED** | `services/search`, `services/catalog/videoDetail`, `services/topics`, `services/ai` |
+| 1c | Transcript overwrite | `Transcript.videoId @unique`; any user's upload deletes and replaces the existing transcript (incl. another user's or owner captions) | **CONFIRMED** | `services/transcripts/storeTranscript` |
+| 1d | Revocation purge scope | Disconnect purges *all* OWNER_CAPTIONS for the channel IDs, including other users' | **CONFIRMED** | `workspaces.purgeYouTubeConnectionData` |
+| 2 | Channel addition | `POST /api/channels` resolves then directly enqueues ingest | **CONFIRMED** | `catalog.addChannel` |
+| 3 | Channel sync | `POST /api/channels/:id/sync` directly enqueues sync / full backfill | **CONFIRMED** | route |
+| 3b | Other unapproved expansion paths | `POST /api/demo/load` bulk-enqueues; scheduler auto-enqueues syncs (adds new uploads) and stats refresh; compliance auto-refreshes; seed enqueues | **CONFIRMED** | `ingestion.scheduleDueSyncs/scheduleStatsRefresh`, `compliance`, `demo/load`, seed |
+| 4 | Expansion workflow | Only "confirm before spending a search" exists; no durable proposal/approval | **CONFIRMED (NOT_PRESENT)** | — |
+| 5 | Compliance refresh | Channel refresh updates title/description/stats only but advances `lastRefreshedAt` (thumbnails, keywords, country, topics, playlist never refreshed); video refresh skips thumbnails/duration/category/language | **CONFIRMED** | `services/compliance` |
+| 6 | Compliance deletion | When background budget is unavailable, batches 27 days old (deadline 30) are deleted immediately | **CONFIRMED** | `services/compliance` (`deletedNoBudget`) |
+| 6b | Transient errors | One upstream error aborts the whole compliance run (nothing after it is refreshed or deleted) | **CONFIRMED** | no per-batch error handling |
+| 7 | Thumbnails | One `thumbnailUrl`; schema only parses default/medium/high and live client requests medium/high | **CONFIRMED** | `youtube/schemas.ts`, `live.ts` |
+| 8 | Transcript model | One transcript per video | **CONFIRMED** | schema |
+| 9 | AI integration | Anthropic used for extraction/reranking only; no Atlas tool interface / MCP | **CONFIRMED** | `services/ai` |
+| 10 | Maintenance scripts | `db:reset` and `embeddings:reindex` **exist** (PROGRESS "known issue" was stale). Reset has no production guard; reindex is not resumable and does not track model/dimension | **PARTIALLY_PRESENT** | `scripts/` |
+| 11 | Docker | Fixed `atlas/atlas` credentials, Postgres/Redis published on 0.0.0.0, prod profile reuses them, Redis without auth | **CONFIRMED** | `docker-compose.yml` |
+| 12 | Similarity relationships | Sparse at spec thresholds; no evaluation data | **CONFIRMED (no evaluation)** | DECISIONS.md |
+| 13 | Coverage | No field-level coverage or availability tracking; unavailable stats stored as null with no reason; missing videos from `videos.list` silently dropped | **NOT_PRESENT** | — |
+| 14 | Upload history | Single `backfillPageToken`; ids for up to 5,000 videos gathered in memory before any write (crash loses all); no pages/oldest/newest/state | **PARTIALLY_PRESENT** | `ingestion.ingestUnlocked` |
+| 15 | Provenance | `VideoTopic.source` and `GraphEdge.evidence` exist; no extractor/model/taxonomy versions, no field/chunk attribution, no fact-vs-inference labeling | **PARTIALLY_PRESENT** | — |
+| 16 | Policy gate | No live-collection or cross-owner gate; API key presence enables everything | **NOT_PRESENT** | `env.ts` |
+| 17 | Jobs endpoint | `GET /api/jobs/:id` is `auth: "none"` and returns job results to anyone with an ID | **CONFIRMED** (new finding) | route |
+| 18 | Admin failed-job list | Returns raw job `data` (no secrets today, but unbounded) | NOT_REPRODUCIBLE as a leak | `admin/overview` |
+
+Preserved as-is (CONFIRMED working, covered by tests): YouTube live/fixture clients, central `costs.ts`, Lua quota
+buckets + lanes, response cache, resolver (cheap paths first), uploads-playlist enumeration (never `search.list`),
+BullMQ runtime (quota delay, retry policy), embeddings providers, TF-IDF topics, classification, materialized
+graph + incremental builder, search (keyword/semantic/hybrid), Better Auth, workspaces/collections IDOR protection,
+SSE, admin/bull-board.
+
+### Conflicts between documents
+- BUILD_SPEC §7.11 schedules automatic syncs (adding new uploads), stats refresh and compliance refresh. The newer
+  spec requires explicit, single-use approval for every addition or refresh. **Newer spec wins**: schedulers now
+  raise SYSTEM proposals; deletion stays automatic.
+- BUILD_SPEC assumes cross-channel aggregation; the developer policies appear to restrict it (III.E.2.a). Kept for
+  fixture mode; gated for live data (see COMPLIANCE_DECISIONS.md).
+
+### Roadmap (dependency order) and status
+| Phase | Scope | Status |
+|---|---|---|
+| 0 | Audit, compliance doc, policy feature gate | in progress |
+| 1 | Transcript ownership/visibility model + authorization everywhere + IDOR tests | pending |
+| 2 | ExpansionProposal model, service, approval routes, producer + worker enforcement, scheduler → proposals | pending |
+| 3 | Full channel/video metadata, thumbnail variants, statistics availability, FieldCoverage + coverage API | pending |
+| 4 | Compliance lifecycle: field-group retention, deadline-aware deletion, approval-gated refresh, revocation purge | pending |
+| 5 | Checkpointed, resumable, bounded upload-history backfill | pending |
+| 6 | Provenance (extractor/model/taxonomy versions, field + chunk evidence), fact vs inference, relationship evaluation | pending |
+| 7 | Agent tokens, Atlas tool service (read + propose), HTTP tool endpoint, MCP stdio adapter | pending |
+| 8 | Prod compose, backups/restore, reset guard, resumable reindex, graph verify, recovery, alerts | pending |
+| UI | Coverage + approvals page, proposal review dialog wired into every expansion action | pending |
+
+Policy-sensitive (blocked on the owner, infrastructure built): enabling live collection; cross-owner aggregation;
+derived-metrics amendment; Google OAuth verification for `youtube.force-ssl`.
+
+Testing requirements per phase: unit (scope hashing, estimates, coverage transitions, retention math, transcript
+identity), integration (approval at every route, worker rejection, scope mismatch, replay, bounds, IDOR, revocation,
+partial responses, quota-safe compliance, resumable backfill), e2e (propose → review → approve → data appears).
+
+---
+
+## Round 1 — original build (BUILD_SPEC §16), completed 2026-11-08
+- [x] Phases 0–9 (foundations, YouTube layer, ingestion, intelligence, graph, search, personal layer, atlas UI,
+  pages, polish) and a spec-gap pass. 92 unit, 32 integration, 10 e2e tests passed at the end of round 1.
 
 ## Environment notes
 - Node v24.22.2 + pnpm 12.18 at `~/.local/node` (not on default PATH; prefix commands).
 - Docker via OrbStack.
 
 ## Known issues
-- `scripts/db-reset.ts` and `scripts/embeddings-reindex.ts` are referenced in package.json but not written yet.
-- Demo-data SIMILAR/CO_TOPIC edges are sparse at spec thresholds (see DECISIONS.md).
-- Seed must run with the worker code available in-process (it does); first run downloads the MiniLM model (~23 MB).
+- Demo-data SIMILAR/CO_TOPIC edges are sparse at spec thresholds (see DECISIONS.md; evaluation added in phase 6).
+- First seed downloads the MiniLM model (~23 MB).

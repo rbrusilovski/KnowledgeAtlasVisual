@@ -9,10 +9,13 @@ import { CACHE_TTL, costOf, MAX_IDS_PER_CALL, type YouTubeMethod } from "./costs
 import { LiveYouTubeClient } from "./live";
 import { FixtureYouTubeClient } from "./fixture";
 import { YouTubeApiError, type RawYouTubeClient, type SearchChannelsParams } from "./types";
+import { assertAllowed } from "./policy";
 
 export * from "./types";
-export { parseIsoDuration, bestThumb, type YtChannel, type YtVideo } from "./schemas";
+export { parseIsoDuration, bestThumb, THUMBNAIL_VARIANTS, type YtChannel, type YtVideo } from "./schemas";
+export * from "./normalize";
 export { costOf, bucketLimits, CACHE_TTL } from "./costs";
+export { allowed as policyAllows, assertAllowed as assertPolicy, policyStatus, PolicyBlockedError, type PolicyCapability, type PolicyStatus } from "./policy";
 
 export interface YouTubeCallContext {
   lane: quota.Lane;
@@ -46,6 +49,8 @@ export const youtubeMode = () => env.YOUTUBE_MODE;
 
 /** Reserve quota, call, account. Even fixture mode meters quota so the UI reflects realistic spend. */
 async function metered<T>(method: YouTubeMethod, fn: () => Promise<T>): Promise<T> {
+  // Every metered call collects API Data. Blocked in live mode until the owner enables it (fixture mode: always open).
+  assertAllowed("live-collection");
   const c = current();
   const cost = costOf(method);
   const r = await quota.reserve(cost.bucket, cost.units, c.lane);

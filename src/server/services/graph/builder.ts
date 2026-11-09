@@ -12,6 +12,7 @@ import { redis, key } from "@/server/redis";
 import { log } from "@/server/logger";
 import { knn, getVector } from "@/server/db/vector";
 import { publish } from "@/server/services/realtime";
+import { allowed as policyAllows } from "@/server/youtube/policy";
 
 export const MIN_TOPIC_VIDEOS = 2;
 const SIMILAR_MIN = 0.75;
@@ -282,11 +283,19 @@ async function channelEdges(youtubeId: string, extraDirty: Set<string>): Promise
       { kind: "FEATURED", side: "source", edges: featOut },
       { kind: "FEATURED", side: "target", edges: featIn },
     ],
-    votes: [
-      { kind: "SIMILAR", picks: similar },
-      { kind: "CO_TOPIC", picks: coTopic },
-      { kind: "CO_DISCOVERED", picks: coDisc },
-    ],
+    // Cross-owner relationships are policy-gated for live data (docs/COMPLIANCE_DECISIONS.md §10). An empty vote
+    // withdraws this node's previous picks, so flipping the gate off also cleans up existing edges on rebuild.
+    votes: policyAllows("cross-owner-aggregation")
+      ? [
+          { kind: "SIMILAR", picks: similar },
+          { kind: "CO_TOPIC", picks: coTopic },
+          { kind: "CO_DISCOVERED", picks: coDisc },
+        ]
+      : [
+          { kind: "SIMILAR", picks: [] },
+          { kind: "CO_TOPIC", picks: [] },
+          { kind: "CO_DISCOVERED", picks: [] },
+        ],
   };
 }
 
@@ -322,7 +331,7 @@ async function topicEdges(slug: string): Promise<Owned> {
   const scored = co.map((c) => ({ other: `topic:${c.slug}`, score: npmi(c.co, t.videoCount, c.cnt, n), co: c.co })).filter((c) => c.score > 0);
   return {
     replace: [{ kind: "MENTIONS", side: "target", edges: mentions.map((m) => ({ sourceId: `video:${m.youtubeId}`, targetId: nodeId, kind: "MENTIONS", weight: +m.w.toFixed(3), evidence: null })) }],
-    votes: [{ kind: "TOPIC_RELATED", picks: topK(scored, TOP_K, (x) => x.score, (x) => x.other).map((s) => ({ other: s.other, weight: +s.score.toFixed(4), evidence: { cooccurrences: s.co } })) }],
+    votes: [{ kind: "TOPIC_RELATED", picks: !policyAllows("cross-owner-aggregation") ? [] : topK(scored, TOP_K, (x) => x.score, (x) => x.other).map((s) => ({ other: s.other, weight: +s.score.toFixed(4), evidence: { cooccurrences: s.co } })) }],
   };
 }
 
@@ -340,9 +349,10 @@ async function nicheEdges(slug: string, isSub: boolean): Promise<Owned> {
     WHERE cn."nicheId" = ${n.id} AND t."videoCount" >= ${MIN_TOPIC_VIDEOS} AND t."channelCount" >= 1
     GROUP BY t.slug ORDER BY w DESC, t.slug LIMIT ${NICHE_TOPIC_K}`;
   const max = agg[0]?.w ?? 1;
+  const nicheTopics = policyAllows("cross-owner-aggregation") ? agg : [];
   return {
     replace: [
-      { kind: "NICHE_TOPIC", side: "source", edges: agg.map((a) => ({ sourceId: nodeId, targetId: `topic:${a.slug}`, kind: "NICHE_TOPIC", weight: +(a.w / max).toFixed(3), evidence: null })) },
+      { kind: "NICHE_TOPIC", side: "source", edges: nicheTopics.map((a) => ({ sourceId: nodeId, targetId: `topic:${a.slug}`, kind: "NICHE_TOPIC", weight: +(a.w / max).toFixed(3), evidence: null })) },
       ...(n.parent ? [{ kind: "CONTAINS" as const, side: "target" as const, edges: [{ sourceId: `niche:${n.parent.slug}`, targetId: nodeId, kind: "CONTAINS" as const, weight: 1, evidence: null }] }] : []),
     ],
     votes: [],

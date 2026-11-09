@@ -6,10 +6,21 @@ import { BULL_PREFIX, CONCURRENCY, type JobPayloads, type QueueName } from "@/se
 import { YouTubeApiError } from "@/server/youtube";
 import { nextResetAt } from "@/server/services/quota";
 import { emitJobEvent, type JobControl } from "@/server/services/ingestion";
+import { completeJob, ApprovalError } from "@/server/services/expansion";
+import { PolicyBlockedError } from "@/server/youtube";
 
 export type Processor<N extends QueueName> = (job: Job<JobPayloads[N]>, ctl: JobControl) => Promise<unknown>;
 
 const RETRY_BACKOFF_MAX_MS = 10 * 60_000;
+
+function proposalOf(job: Job): string | undefined {
+  return (job.data as { auth?: { proposalId?: string } })?.auth?.proposalId;
+}
+
+function usage(result: unknown): { units?: number; searches?: number } {
+  const r = result as { units?: number; searches?: number } | null;
+  return { units: typeof r?.units === "number" ? r.units : 0, searches: typeof r?.searches === "number" ? r.searches : 0 };
+}
 
 function requestedBy(job: Job): string | undefined {
   const d = job.data as { requestedBy?: string };
@@ -39,7 +50,9 @@ export function createWorker<N extends QueueName>(name: N, processor: Processor<
         const t0 = performance.now();
         try {
           const result = await processor(job, ctl);
-          log.info({ ms: Math.round(performance.now() - t0) }, "job completed");
+          log.info({ ms: Math.round(performance.now() - t0), proposalId: proposalOf(job) }, "job completed");
+          const pid = proposalOf(job);
+          if (pid) await completeJob(pid, job.id!, { ok: true, ...usage(result), result: summarize(result) });
           return result;
         } catch (err) {
           if (err instanceof AppError && err.code === "QUOTA_EXHAUSTED") {
@@ -53,6 +66,10 @@ export function createWorker<N extends QueueName>(name: N, processor: Processor<
           if (err instanceof YouTubeApiError) {
             if (err.retryable) throw err;
             throw new UnrecoverableError(`YouTube ${err.status} ${err.reason}: ${err.message}`);
+          }
+          if (err instanceof ApprovalError || err instanceof PolicyBlockedError) {
+            log.warn({ proposalId: proposalOf(job), err: err.message }, "job refused: not authorized");
+            throw new UnrecoverableError(err.message);
           }
           if (err instanceof AppError && ["NOT_FOUND", "VALIDATION_ERROR", "FORBIDDEN", "CONFLICT"].includes(err.code)) {
             throw new UnrecoverableError(err.message);
@@ -81,7 +98,11 @@ export function createWorker<N extends QueueName>(name: N, processor: Processor<
     if (!job) return;
     const final = err instanceof UnrecoverableError || err.name === "UnrecoverableError" || job.attemptsMade >= (job.opts.attempts ?? 1);
     baseLogger.error({ queue: name, jobId: job.id, attempts: job.attemptsMade, final, err: err.message }, "job failed");
-    if (final) void emitJobEvent("job.failed", { jobId: job.id!, queue: name, error: err.message }, requestedBy(job)).catch(() => undefined);
+    if (final) {
+      void emitJobEvent("job.failed", { jobId: job.id!, queue: name, error: err.message }, requestedBy(job)).catch(() => undefined);
+      const pid = proposalOf(job);
+      if (pid) void completeJob(pid, job.id!, { ok: false, error: err.message.slice(0, 500) }).catch((e) => baseLogger.error({ e, pid }, "could not record job failure"));
+    }
   });
   worker.on("error", (err) => baseLogger.error({ queue: name, err }, "worker error"));
   return worker;
