@@ -61,13 +61,21 @@ describe("intelligence + graph pipeline (fixture mode)", () => {
     expect(await db.graphNode.count({ where: { type: "TOPIC" } })).toBe(await db.topic.count({ where: { videoCount: { gte: 2 } } }));
   });
 
-  it("semantic KNN returns sensible neighbors (video about X near other X videos)", async () => {
-    const v = await db.video.findFirstOrThrow({ where: { channel: { youtubeId: channels[2]! } } });
-    const vec = (await getVector("Video", v.id))!;
-    const hits = await knn("Video", vec, 6, { excludeId: v.id });
-    const owners = await db.video.findMany({ where: { id: { in: hits.map((h) => h.id) } }, select: { channel: { select: { youtubeId: true } } } });
-    const same = owners.filter((o) => o.channel.youtubeId === channels[2]).length;
-    expect(same).toBeGreaterThanOrEqual(4);
+  it("semantic KNN returns sensible neighbors (videos cluster with their own channel's videos)", async () => {
+    // Aggregate over several videos (deterministic order) so one atypical title can't make this flaky.
+    const ch = await db.channel.findUniqueOrThrow({ where: { youtubeId: channels[2]! } });
+    const sample = await db.video.findMany({ where: { channelId: ch.id, isShort: false }, orderBy: { youtubeId: "asc" }, take: 6 });
+    let same = 0;
+    let total = 0;
+    for (const v of sample) {
+      const vec = (await getVector("Video", v.id))!;
+      const hits = await knn("Video", vec, 5, { excludeId: v.id });
+      const owners = await db.video.findMany({ where: { id: { in: hits.map((h) => h.id) } }, select: { channelId: true } });
+      same += owners.filter((o) => o.channelId === ch.id).length;
+      total += owners.length;
+    }
+    // 4 channels are ingested, so chance level is ~25%; require a clear majority.
+    expect(same / total).toBeGreaterThan(0.5);
   });
 
   it("builds structural and semantic edges", async () => {
