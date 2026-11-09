@@ -213,7 +213,8 @@ function TranscriptPanel({ video, activeSec, onSeek, signedIn }: { video: VideoD
   const listRef = useRef<HTMLOListElement>(null);
   const data = r.data?.data ?? null;
   const hitIds = useMemo(() => new Set(data?.hits?.map((h) => h.id)), [data?.hits]);
-  const activeIdx = activeSec === null || !data ? -1 : data.chunks.findIndex((c) => activeSec >= c.startSec && activeSec < c.endSec + 0.01);
+  // Last chunk starting at or before the (whole-second) timestamp; chunks overlap, so prefer the latest start.
+  const activeIdx = activeSec === null || !data ? -1 : data.chunks.reduce((best, c, i) => (Math.floor(c.startSec) <= activeSec ? i : best), activeSec !== null && data.chunks.length ? 0 : -1);
   useEffect(() => {
     if (activeIdx < 0) return;
     listRef.current?.querySelector(`[data-idx="${activeIdx}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });

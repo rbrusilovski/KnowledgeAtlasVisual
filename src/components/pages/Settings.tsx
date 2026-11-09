@@ -49,7 +49,7 @@ export function SettingsPage({ youtubeOAuth }: { youtubeOAuth: boolean }) {
     if (y === "denied") toast.error("YouTube connection was cancelled");
   }, [sp]);
 
-  if (me.isLoading) return <Page><Skeleton className="h-64" /></Page>;
+  if (me.isPending) return <Page><Skeleton className="h-64" /></Page>;
   if (!me.data)
     return (
       <Page>

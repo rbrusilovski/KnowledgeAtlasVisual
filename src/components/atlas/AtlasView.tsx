@@ -147,7 +147,8 @@ export function AtlasView() {
   const loadedKey = useRef<string>("");
   useEffect(() => {
     if (!mounted || !graphQuery.data) return;
-    if (signedIn && layout.isLoading) return;
+    // Wait for the session + workspace layout so pinned positions apply on the first merge.
+    if (me.isPending || (signedIn && (!workspace || layout.isLoading))) return;
     const key = `${params.mode}|${params.focus}|${params.depth}|${graphQuery.dataUpdatedAt}`;
     if (loadedKey.current === key) return;
     const firstLoad = !loadedKey.current;
@@ -162,7 +163,7 @@ export function AtlasView() {
     if (needsLayout) void atlas.startLayout();
     if (params.mode === "local" && params.focus) setTimeout(() => atlas.flyTo(params.focus!, 0.7), firstLoad ? 900 : 300);
     else if (firstLoad || params.mode === "global") setTimeout(() => atlas.fit(), 200);
-  }, [mounted, graphQuery.data, graphQuery.dataUpdatedAt, layout.data, layout.isLoading, signedIn, params.mode, params.focus, params.depth]);
+  }, [mounted, graphQuery.data, graphQuery.dataUpdatedAt, layout.data, layout.isLoading, signedIn, workspace, me.isPending, params.mode, params.focus, params.depth]);
 
   // Live updates: graph.delta → fetch delta since our version, merge with enter animation.
   useEffect(() => {

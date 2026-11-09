@@ -27,6 +27,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // A separate build dir lets the e2e server run alongside `pnpm dev`.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   reactStrictMode: true,
   poweredByHeader: false,
   serverExternalPackages: ["@huggingface/transformers", "onnxruntime-node", "sharp", "pino", "bullmq", "ioredis"],

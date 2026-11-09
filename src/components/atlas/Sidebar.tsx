@@ -102,16 +102,17 @@ function NicheTree() {
 }
 
 function Collections() {
-  const { workspace, signedIn } = useActiveWorkspace();
-  const { data, isLoading } = useCollections(workspace?.id);
+  const { workspace, signedIn, isLoading: sessionLoading } = useActiveWorkspace();
+  const { data, isPending } = useCollections(workspace?.id);
   const { params, setParams } = useAtlasParams();
   const add = useAddToCollection();
   const qc = useQueryClient();
   const [over, setOver] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
+  if (sessionLoading) return <div className="space-y-1.5 px-3"><Skeleton className="h-6" /><Skeleton className="h-6" /></div>;
   if (!signedIn) return <p className="px-3 text-xs text-text-3"><Link href="/signin" className="text-accent-300 hover:underline">Sign in</Link> to save nodes into collections.</p>;
-  if (isLoading) return <div className="space-y-1.5 px-3"><Skeleton className="h-6" /><Skeleton className="h-6" /></div>;
+  if (isPending) return <div className="space-y-1.5 px-3"><Skeleton className="h-6" /><Skeleton className="h-6" /></div>;
   return (
     <div className="px-1.5">
       {data?.length ? null : <p className="px-2 pb-1 text-xs text-text-3">No collections yet.</p>}

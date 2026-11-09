@@ -48,3 +48,5 @@ next-env.d.ts
 /blob-report/
 /.cache/
 /.atlas/
+/.next-e2e/
+/.next-build/

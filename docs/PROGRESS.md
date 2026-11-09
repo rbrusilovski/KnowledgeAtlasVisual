@@ -22,15 +22,15 @@ Source of truth: `BUILD_SPEC.md`. Phases follow §16.
 - [x] Phase 4 — Graph: all edge kinds, provenance-exact incremental builds, Louvain, global/local traversal (Redis-cached by version), neighbors, delta, related creators, path.
 - [x] Phase 5 — Search: keyword/fuzzy/semantic/hybrid (RRF), channel-scoped facets, transcript deep links. suggest ≈ 3 ms warm.
 - [x] Phase 6 — Personal layer: workspaces/collections/items/views/layouts, export (JSON/CSV), account deletion, rate limits, security headers, IDOR tests.
-- [x] Phase 7 — Atlas UI (verified manually in browser: render, hover-highlight, select→inspector, double-click expand, ⌘K search-to-focus, context menu, drag-pin persisted across reload). Playwright specs NOT yet written.
-- [ ] Phase 8 — Pages. DONE: landing, signin, discover, channel, video, collections list/detail.
-  TODO: /search page, /settings, /admin (API exists: /api/admin/overview + bull-board proxy), /privacy + /terms templates,
-  /dev/graph-bench (10k synthetic nodes + FPS). Not yet browser-checked: discover, channel, video, collections pages.
-- [ ] Phase 9 — Polish, README, CI. TODO: Playwright e2e specs (needs `pnpm exec playwright install chromium`),
-  README (≤5-command quickstart, live-mode key, quota cheat-sheet, transcript limits), GitHub Actions CI, `pnpm build`
-  + grep build output for secrets, a11y/contrast pass, scripts `db:reset` and `embeddings:reindex` (package.json references them; files missing).
+- [x] Phase 7 — Atlas UI: sigma 4 canvas, FA2 worker layout, hover-highlight, select, box-select, drag-to-pin (persisted),
+  expand/collapse, context menu, filters via reducers (URL state), clustering labels, local mode, inspector, hover cards,
+  ⌘K palette with search-to-focus, live graph deltas, list view, status bar.
+- [x] Phase 8 — Pages: landing, sign-in, discover, channel, video, collections (+detail), search, settings, admin,
+  privacy/terms templates, /dev/graph-bench.
+- [ ] Phase 9 — Polish & hardening: README + CI written; e2e specs written (see e2e/); remaining: green e2e run,
+  production build + client-bundle secret grep, final a11y pass.
 
-Tests: 92 unit, 30 integration passing.
+Tests: 92 unit, 31 integration passing; 10 Playwright specs.
 
 ## Environment notes
 - Node v24.22.2 + pnpm 12.18 at `~/.local/node` (not on default PATH; prefix commands).

@@ -132,7 +132,7 @@ function WorkspaceSwitcher() {
 }
 
 function UserMenu() {
-  const { data: me, isLoading } = useMe();
+  const { data: me, isPending: isLoading } = useMe();
   const router = useRouter();
   const qc = useQueryClient();
   if (isLoading) return <div className="size-7 animate-pulse rounded-full bg-bg-3" />;

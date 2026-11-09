@@ -64,7 +64,9 @@ export function useActiveWorkspace() {
   const ws = useWorkspaces(Boolean(me.data));
   const activeId = useUi((s) => s.workspaceId);
   const active = ws.data?.find((w) => w.id === activeId) ?? ws.data?.[0] ?? null;
-  return { workspace: active, workspaces: ws.data ?? [], isLoading: me.isLoading || ws.isLoading, signedIn: Boolean(me.data) };
+  // isPending (not isLoading): on the server and the first client render the query is pending but not fetching,
+  // so both render the same skeleton (no hydration mismatch).
+  return { workspace: active, workspaces: ws.data ?? [], isLoading: me.isPending || (Boolean(me.data) && ws.isPending), signedIn: Boolean(me.data) };
 }
 
 export function useCollections(workspaceId: string | undefined) {

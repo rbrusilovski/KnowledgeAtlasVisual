@@ -67,8 +67,12 @@ async function main() {
   const index = JSON.parse(readFileSync(indexFile, "utf8")) as { channels: { id: string; title: string }[] };
   const workers = startWorkers();
   try {
-    for (const c of index.channels) await enqueue.ingest({ youtubeId: c.id, lane: "background" });
-    log(`enqueued ${index.channels.length} fictional demo channels`);
+    const ci = process.argv.indexOf("--channels");
+    const limit = ci >= 0 ? Number(process.argv[ci + 1]) : index.channels.length;
+    // --channels N ingests the first N (in subniche order, so several niches are covered); the rest stay discoverable.
+    const pick = index.channels.slice(0, limit);
+    for (const c of pick) await enqueue.ingest({ youtubeId: c.id, lane: "background" });
+    log(`enqueued ${pick.length} fictional demo channels`);
     await drainAll();
   } finally {
     await Promise.all(workers.map((w) => w.close()));

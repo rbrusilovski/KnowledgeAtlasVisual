@@ -78,6 +78,8 @@ export const useUi = create<UiState>()(
     }),
     {
       name: "atlas-ui",
+      // Rehydrated after mount (Providers) so the first client render matches the server HTML.
+      skipHydration: true,
       partialize: (s) => ({ workspaceId: s.workspaceId, sidebarOpen: s.sidebarOpen, inspectorOpen: s.inspectorOpen, colorBy: s.colorBy, labels: s.labels, sizeBy: s.sizeBy }),
     },
   ),

@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const PORT = Number(process.env.E2E_PORT ?? 3000);
+const PORT = Number(process.env.E2E_PORT ?? 3100);
 
 export default defineConfig({
   testDir: "e2e",
@@ -19,9 +19,10 @@ export default defineConfig({
   webServer: process.env.E2E_NO_SERVER
     ? undefined
     : {
-        command: "pnpm dev",
-        url: `http://localhost:${PORT}/api/health`,
-        reuseExistingServer: true,
-        timeout: 180_000,
+        command: "pnpm -s tsx scripts/e2e-server.ts",
+        url: `http://localhost:${PORT}/api/niches`,
+        reuseExistingServer: !process.env.CI,
+        timeout: 600_000,
+        stdout: "pipe",
       },
 });

@@ -4,7 +4,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { MotionConfig } from "motion/react";
 import { Toaster } from "sonner";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useUi } from "@/lib/atlas/store";
 import { ApiError } from "@/lib/api";
 
 export function Providers({ children, reducedMotion }: { children: ReactNode; reducedMotion?: boolean }) {
@@ -20,6 +21,9 @@ export function Providers({ children, reducedMotion }: { children: ReactNode; re
         },
       }),
   );
+  useEffect(() => {
+    void useUi.persist.rehydrate();
+  }, []);
   return (
     <QueryClientProvider client={client}>
       <NuqsAdapter>

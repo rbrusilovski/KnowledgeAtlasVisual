@@ -51,7 +51,7 @@ export function CollectionsPage() {
           <Plus /> New collection
         </Button>
       </div>
-      {cols.isLoading || me.isLoading ? (
+      {cols.isLoading || me.isPending || (!cols.data && !cols.error) ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">{Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="h-28 rounded-card" />)}</div>
       ) : cols.error ? (
         <ErrorState error={cols.error} onRetry={() => cols.refetch()} />
@@ -126,7 +126,7 @@ export function CollectionDetailPage({ id }: { id: string }) {
   const [tag, setTag] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   if (me.data === null) return <SignInGate />;
-  if (q.isLoading || me.isLoading)
+  if (q.isLoading || me.isPending || (!q.data && !q.error))
     return (
       <Page wide>
         <PanelSkeleton rows={6} />
