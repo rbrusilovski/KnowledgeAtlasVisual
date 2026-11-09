@@ -1,5 +1,7 @@
 "use client";
 
+import type { ProposalDTO } from "@/shared/contracts/expansion";
+import { reviewProposal } from "@/components/expansion/ProposalReview";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -76,7 +78,8 @@ export function DiscoverPage() {
     () =>
       live.subscribe((ev) => {
         if (ev.type !== "job.completed" || ev.data.queue !== "ingest-channel") return;
-        const yt = String(ev.data.jobId).replace(/^ingest-/, "").replace(/-full$/, "");
+        // Approved ingest jobs are `x-<proposalId>-ingest-<UC…>`; the progress payload also carries youtubeId.
+        const yt = String(ev.data.youtubeId ?? String(ev.data.jobId).split("-ingest-").pop());
         setAdding((m) => (m.has(yt) ? new Map(m).set(yt, "done") : m));
       }),
     [live],
@@ -101,17 +104,24 @@ export function DiscoverPage() {
     },
   });
 
+  /** One ADD_CHANNELS proposal for the selection; the review dialog shows scope + cost before anything runs. */
   const addChannels = async (ids: string[]) => {
-    for (const id of ids) {
-      try {
-        const r = await api.post<{ status: string }>("/api/channels", { input: id });
-        setAdding((m) => new Map(m).set(id, r.status === "exists" ? "done" : "queued"));
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : `Could not add ${id}`);
-      }
+    try {
+      const p = await api.post<ProposalDTO>("/api/expansions", {
+        scope: { kind: "ADD_CHANNELS", channels: ids.map((youtubeId) => ({ youtubeId, aliases: [] })), maxVideosPerChannel: 300, includeTranscripts: true },
+        reason: `Selected on the Discover page (${ids.length} channel${ids.length > 1 ? "s" : ""}).`,
+        coverageGap: "Channels found by discovery that are not in the atlas yet.",
+      });
+      setAdding((m) => {
+        const n = new Map(m);
+        ids.forEach((id) => n.set(id, "queued"));
+        return n;
+      });
+      reviewProposal(p);
+      setSelected(new Set());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not create the proposal");
     }
-    toast.success(`${ids.length} channel${ids.length > 1 ? "s" : ""} queued — they'll appear in the atlas live`);
-    setSelected(new Set());
   };
 
   if (me.data === null)
@@ -237,7 +247,7 @@ export function DiscoverPage() {
                             </Badge>
                           ) : state === "queued" ? (
                             <Badge>
-                              <Loader2 className="size-3 animate-spin" /> Ingesting…
+                              <Loader2 className="size-3 animate-spin" /> Requested…
                             </Badge>
                           ) : (
                             <Button size="sm" variant="secondary" onClick={() => void addChannels([r.youtubeId])} data-testid="add-to-atlas">

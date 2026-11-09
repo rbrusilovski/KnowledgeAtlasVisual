@@ -1,5 +1,7 @@
 "use client";
 
+import type { ProposalDTO } from "@/shared/contracts/expansion";
+import { reviewProposal } from "@/components/expansion/ProposalReview";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -303,8 +305,9 @@ function EmptyAtlas() {
               onClick={async () => {
                 setLoading(true);
                 try {
-                  const r = await api.post<{ queued: number }>("/api/demo/load");
-                  toast.success(r.queued ? `Ingesting ${r.queued} fictional demo channels — they'll appear here live` : "The demo dataset is already loaded");
+                  const r = await api.post<ProposalDTO | null>("/api/demo/load");
+                  if (r) reviewProposal(r);
+                  else toast.success("The demo dataset is already loaded");
                 } catch (e) {
                   toast.error(e instanceof Error ? e.message : "Could not load the demo dataset");
                 } finally {
@@ -312,7 +315,7 @@ function EmptyAtlas() {
                 }
               }}
             >
-              <Database /> {loading ? "Queuing…" : "Load demo dataset"}
+              <Database /> {loading ? "Preparing…" : "Load demo dataset"}
             </Button>
           ) : null}
         </EmptyState>

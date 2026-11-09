@@ -200,6 +200,7 @@ export function TopBar() {
           ["/discover", "Discover"],
           ["/search", "Search"],
           ["/collections", "Collections"],
+          ["/data", "Data"],
         ].map(([href, label]) => (
           <Link key={href} href={href!} className="rounded-control px-2 py-1 text-sm text-text-2 hover:bg-bg-3 hover:text-text-1">
             {label}

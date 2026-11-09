@@ -19,3 +19,22 @@ Format: severity · finding · impact · affected files · recommendation.
 | D9 | Low | Classification provenance (`ChannelNiche`) has method/rationale but no classifier/taxonomy version or score breakdown. | Hard to explain or re-audit niche assignments. | `services/classification` | Store score components + versions in a JSON evidence column. |
 | D10 | Low | `next.config.ts` / CSP and general security headers were not re-reviewed in this session. | — | `next.config.ts` | Re-review alongside D1. |
 | D11 | Low | Global search ranking/UX and graph visualization were not changed; private transcripts are now excluded from shared search (see PROGRESS.md) — a per-user "my transcripts" search scope could be surfaced in the UI. | UX gap only. | `services/search`, `components/pages/Search.tsx` | Add a "My transcripts" filter. |
+| D12 | Medium | Operational alerts not yet covered by D6: quota exhaustion, API data approaching its retention deadline (data exists in `/api/coverage` → `retention`), stale graph materialization (dirty-set age). | Owner may miss the compliance-refresh approval window. | `src/server/health.ts`, `services/coverage`, `services/graph` | Surface as admin alerts alongside D6. |
+| D13 | Low | Prompt §16.3 Claude E2E ("Claude identifies a gap and proposes") cannot be written until D7 exists. Proposal-review and approval E2E for user/system proposals is covered. | Claude flow untested end-to-end. | `e2e/` | Add after D7. |
+
+## Cross-reference: prompt §2.1 findings → where they are tracked
+
+| Prompt finding | Tracked in | Status |
+|---|---|---|
+| Transcript endpoint `auth: "none"` | PROGRESS.md audit #1/#1b/#1c/#1d | Fixed this session |
+| Channel addition directly enqueued | PROGRESS.md #2 | Fixed (proposal + approval) |
+| Channel sync directly enqueued | PROGRESS.md #3, #3b | Fixed |
+| No durable universal approval | PROGRESS.md #4 | Fixed |
+| Compliance refresh advanced record-wide timestamp | PROGRESS.md #5 | Fixed |
+| Early deletion when quota unavailable | PROGRESS.md #6, #6b | Fixed |
+| Single thumbnail URL | PROGRESS.md #7 | Fixed |
+| One transcript per video | PROGRESS.md #8 | Fixed |
+| AI integration lacks Atlas tools | PROGRESS.md #9 → D7 | Deferred |
+| Missing reset/reindex scripts | PROGRESS.md #10 → D3, D4 | Scripts exist; hardening deferred |
+| Docker dev credentials / exposed ports | PROGRESS.md #11 → D1 | Deferred |
+| Sparse similarity / co-topic edges | PROGRESS.md #12 → D8 | Deferred |

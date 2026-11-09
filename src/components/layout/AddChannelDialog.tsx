@@ -1,5 +1,6 @@
 "use client";
 
+import { reviewProposal } from "@/components/expansion/ProposalReview";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -19,8 +20,8 @@ export function AddChannelDialog({ open, onOpenChange }: { open: boolean; onOpen
       const r = await api.post<AddChannelResult>("/api/channels", { input, confirm: withConfirm || undefined });
       if (r.status === "exists") {
         toast.info(`${r.channel?.title} is already in the atlas`, { action: r.channel ? { label: "Show", onClick: () => window.dispatchEvent(new CustomEvent("atlas:focus", { detail: r.channel!.nodeId })) } : undefined });
-      } else {
-        toast.success("Channel queued for ingestion", { description: "It will appear in the atlas when ready." });
+      } else if (r.proposal) {
+        reviewProposal(r.proposal); // nothing is collected until the user approves this exact scope
       }
       setInput("");
       setConfirm(null);
@@ -64,7 +65,7 @@ export function AddChannelDialog({ open, onOpenChange }: { open: boolean; onOpen
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={!input.trim() || busy}>
-              {busy ? "Resolving…" : "Add to atlas"}
+              {busy ? "Resolving…" : "Review & add"}
             </Button>
           </div>
         </form>

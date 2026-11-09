@@ -92,7 +92,14 @@ test.describe("atlas", () => {
     await page.getByTestId("palette-input").fill("add");
     await page.getByRole("option", { name: "Add channel by URL" }).click();
     await page.getByTestId("add-channel-input").fill(`https://www.youtube.com/@${target.handle}`);
-    await page.getByRole("button", { name: "Add to atlas" }).click();
+    await page.getByRole("button", { name: "Review & add" }).click();
+    // Nothing is collected until the exact proposal is approved.
+    const review = page.getByTestId("proposal-review");
+    await expect(review).toBeVisible({ timeout: 20_000 });
+    await expect(review).toContainText(target.id);
+    await expect(review).toContainText("API units");
+    expect(await hasNode(page, `channel:${target.id}`)).toBe(false);
+    await page.getByTestId("proposal-approve").click();
     await expect.poll(() => hasNode(page, `channel:${target.id}`), { timeout: 120_000, intervals: [1000] }).toBe(true);
   });
 });

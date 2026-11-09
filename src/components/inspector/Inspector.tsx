@@ -1,5 +1,8 @@
 "use client";
 
+import type { AddChannelResult } from "@/shared/contracts/jobs";
+import type { ProposalDTO } from "@/shared/contracts/expansion";
+import { reviewProposal } from "@/components/expansion/ProposalReview";
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -142,7 +145,6 @@ function ChannelPanel({ nodeId }: { nodeId: string }) {
   const [vq, setVq] = useState("");
   const videos = useQuery({ queryKey: ["channel-videos", yt, vq], queryFn: () => api.get<SearchHit[]>(`/api/channels/${yt}/videos`, { q: vq || undefined, limit: 25 }) });
   const related = useQuery({ queryKey: ["related", yt], queryFn: () => api.get<RelatedCreator[]>(`/api/channels/${yt}/related`) });
-  const qc = useQueryClient();
   if (q.isLoading) return <PanelSkeleton />;
   if (q.error) return <ErrorState error={q.error} onRetry={() => q.refetch()} />;
   const c = q.data!;
@@ -172,9 +174,7 @@ function ChannelPanel({ nodeId }: { nodeId: string }) {
             variant="ghost"
             onClick={async () => {
               try {
-                await api.post(`/api/channels/${c.youtubeId}/sync`, {});
-                toast.success("Sync queued");
-                setTimeout(() => qc.invalidateQueries({ queryKey: ["channel", yt] }), 3000);
+                reviewProposal(await api.post<ProposalDTO>(`/api/channels/${c.youtubeId}/sync`, {}));
               } catch (e) {
                 toast.error(e instanceof Error ? e.message : "Sync failed");
               }
@@ -255,7 +255,6 @@ function ChannelPanel({ nodeId }: { nodeId: string }) {
 }
 
 export function RelatedList({ q }: { q: { isLoading: boolean; error: unknown; data?: RelatedCreator[]; refetch: () => unknown } }) {
-  const qc = useQueryClient();
   if (q.isLoading) return <PanelSkeleton rows={4} />;
   if (q.error) return <ErrorState error={q.error} onRetry={() => q.refetch()} />;
   if (!q.data?.length) return <EmptyState icon={<Users />} title="No related creators yet" body="Relations are inferred from featured channels, shared topics, semantic similarity and co-discovery." />;
@@ -278,9 +277,9 @@ export function RelatedList({ q }: { q: { isLoading: boolean; error: unknown; da
                   className="h-6"
                   onClick={async () => {
                     try {
-                      await api.post("/api/channels", { input: r.youtubeId });
-                      toast.success("Adding to atlas…");
-                      void qc.invalidateQueries({ queryKey: ["related"] });
+                      const res = await api.post<AddChannelResult>("/api/channels", { input: r.youtubeId });
+                      if (res.proposal) reviewProposal(res.proposal);
+                      else toast.info("Already in the atlas");
                     } catch (e) {
                       toast.error(e instanceof Error ? e.message : "Could not add");
                     }

@@ -33,6 +33,14 @@ Next.js here is v16 — read `node_modules/next/dist/docs/` before using an unfa
 - Graph node IDs: `niche:<slug>`, `subniche:<slug>`, `channel:<UC…>`, `video:<id>`, `topic:<slug>`.
 - Undirected edges store `sourceId < targetId`.
 
+## YouTube collection (approval-gated)
+- Corpus additions/refreshes ONLY via `services/expansion` proposals → approval → `enqueueExpansion` → services that
+  call `authorizeJob` first. Never call `ingestChannel`/`syncChannel`/… without an approved proposal; never add
+  a direct enqueue path. Tests: `approved(scope, user)` + `ctlFor(jobId)` in `tests/integration/helpers.ts`.
+- Normalization + coverage: `src/server/youtube/normalize.ts`, `services/coverage`. Policy gates: `youtube/policy.ts`.
+- Transcript reads must go through `visibleWhere`/`visibleSql`/`corpusWhere` (services/transcripts).
+- Docs: `docs/COMPLIANCE_DECISIONS.md`, `docs/DEFERRED_AUDIT_FINDINGS.md`.
+
 ## Gotchas
 - HNSW indexes are partial: every KNN query must include `WHERE embedding IS NOT NULL`.
 - tsvector columns are trigger-maintained — never write them from Prisma.

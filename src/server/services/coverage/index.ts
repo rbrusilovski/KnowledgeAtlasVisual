@@ -15,6 +15,8 @@ import {
 } from "@/server/youtube";
 
 const DAY = 86_400_000;
+/** History states that mean older uploads remain to be collected. */
+const MORE_HISTORY = new Set(["INITIAL_WINDOW_COLLECTED", "BACKFILL_IN_PROGRESS", "PAUSED_AWAITING_APPROVAL", "FAILED_RETRYABLE"]);
 /** Retention for Non-Authorized API Data (Developer Policies III.E.4.d). */
 export const API_RETENTION_DAYS = 30;
 /** Derived Metrics Policy: qualifying statistics up to 36 calendar months, only with the amendment accepted. */
@@ -192,7 +194,7 @@ async function summarize(scope: CoverageSummary["scope"], f: Filter): Promise<Co
     completeCount("channel", f),
     completeCount("video", f),
     db.video.count({ where: { ...vWhere, coverage: { none: {} } } }),
-    db.uploadHistory.findMany({ where: f.channelIds ? { channelId: { in: f.channelIds } } : {}, select: { state: true, nextPageToken: true, pagesScanned: true, itemsSeen: true, unavailableCount: true } }),
+    db.uploadHistory.findMany({ where: f.channelIds ? { channelId: { in: f.channelIds } } : {}, select: { state: true, pagesScanned: true, itemsSeen: true, unavailableCount: true } }),
     db.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM "Video" WHERE embedding IS NOT NULL ${f.channelIds ? Prisma.sql`AND "channelId" = ANY(${f.channelIds})` : Prisma.empty}`,
     db.video.count({ where: { ...vWhere, topicsAt: { not: null } } }),
     db.channel.count({ where: { ...chWhere, niches: { some: {} } } }),
@@ -210,7 +212,7 @@ async function summarize(scope: CoverageSummary["scope"], f: Filter): Promise<Co
     videos: { total: videoTotal, complete: vComplete, withoutCoverage: withoutCov, groups: vGroups },
     history: {
       states,
-      channelsWithMoreHistory: histories.filter((h) => h.nextPageToken).length,
+      channelsWithMoreHistory: histories.filter((h) => MORE_HISTORY.has(h.state)).length,
       pagesScanned: histories.reduce((a, h) => a + h.pagesScanned, 0),
       itemsSeen: histories.reduce((a, h) => a + h.itemsSeen, 0),
       unavailable: histories.reduce((a, h) => a + h.unavailableCount, 0),
@@ -289,7 +291,7 @@ export async function inspectChannel(channelId: string) {
       totalResults: h.totalResults,
       reportedVideoCount: c.videoCount,
       remainingEstimate: h.totalResults !== null ? Math.max(0, h.totalResults - h.itemsSeen) : c.videoCount !== null ? Math.max(0, c.videoCount - h.itemsSeen) : null,
-      hasMore: Boolean(h.nextPageToken),
+      hasMore: MORE_HISTORY.has(h.state),
       lastPageAt: h.lastPageAt?.toISOString() ?? null,
       completedAt: h.completedAt?.toISOString() ?? null,
       lastError: h.lastError,

@@ -23,11 +23,30 @@ Open http://localhost:3000 and sign in as `demo@atlas.local` / `atlas-demo-1234`
 channels) through the real pipeline: ingestion → embeddings → topics → classification → graph. The first run
 downloads the 23 MB MiniLM embedding model into `.cache/models`. The UI shows a **Demo data** badge in fixture mode.
 
+## Collection is approval-gated
+
+Nothing is added to or refreshed in the atlas without your explicit approval:
+
+- **Add channel**, **Discover → Add**, **Sync**, **Load full history**, **Load demo dataset** and Claude/agent
+  suggestions create an *expansion proposal* with an exact, bounded scope and a quota estimate.
+- You review it (dialog, or **Data** page → *Waiting for approval*) and approve that exact scope once. The approval is
+  re-checked by the queue producer and by the worker before any data is written; jobs never exceed their bounds.
+- Scheduled syncs, statistics refreshes and the 30-day compliance refresh only *propose* (an admin approves).
+  Compliance **deletion** never waits: unrefreshed API data is deleted at its retention deadline.
+- The **Data** page shows field-level coverage (what's collected, unavailable on YouTube, stale, not requested),
+  upload-history progress, retention deadlines, running jobs and quota.
+
+`pnpm db:seed` approves the fictional demo load from the CLI (fixture mode only).
+
 ## Using real YouTube data
 
 1. In the [Google Cloud console](https://console.cloud.google.com/), create a project, enable **YouTube Data API v3**,
    and create an **API key** (restrict it to that API and your server's IPs).
 2. In `.env`: `YOUTUBE_MODE=live` and `YOUTUBE_API_KEY=…`.
+   **Live collection stays disabled** until you record a decision in `docs/COMPLIANCE_DECISIONS.md` and set
+   `YOUTUBE_LIVE_COLLECTION_ENABLED=true`. Cross-owner relationships and derived data have their own gates — the
+   YouTube Developer Policies restrict aggregating data across content owners (III.E.2) and deriving new data
+   (III.E.4.h). An API key alone enables nothing.
 3. Restart `pnpm dev`. Discover channels on **/discover** or paste any channel/video URL in ⌘K → *Add channel by URL*.
 
 No code changes are needed; fixture and live clients share the same pipeline.
@@ -55,14 +74,17 @@ All numbers live in `src/server/youtube/costs.ts`.
 
 The official API only lets a channel's **owner** download its captions. Atlas therefore uses pluggable providers:
 
-- **Owner captions** — connect your own channel under Settings (`FEATURE_YOUTUBE_OAUTH=true`, Google OAuth with the
+- **Owner captions** — private to the user whose connection authorized them; deleted immediately on disconnect.
+  Connect your own channel under Settings (`FEATURE_YOUTUBE_OAUTH=true`, Google OAuth with the
   `youtube.force-ssl` scope; **this scope requires Google app verification in production**).
-- **User upload** — paste or upload `.vtt`, `.srt` or plain text on any video page.
+- **User upload** — paste or upload `.vtt`, `.srt` or plain text on any video page. **Private to the uploader**: only
+  they can read or search it, and it never feeds shared topics, AI extraction or the graph.
 - **Fixture** — synthetic transcripts for ~30 % of demo videos.
 - **Third party** — an adapter *interface* only, disabled (`TRANSCRIPT_THIRD_PARTY_ENABLED=false`). If you plug one in,
   you are responsible for complying with YouTube's Terms of Service. Atlas ships no scraper.
 
-The UI only claims a transcript exists when one is stored.
+The UI only claims a transcript exists when one is stored. A video without a transcript still counts as fully
+collected — transcripts are one optional field group.
 
 ## Architecture
 
@@ -84,7 +106,8 @@ Worker (src/worker): BullMQ processors — ingest · sync · stats · transcript
 - Relations are explainable: featured channels, semantic similarity (pgvector), shared topics (weighted Jaccard),
   topic co-occurrence (NPMI), and co-discovery.
 - Search fuses keyword (tsvector) and semantic (HNSW) rankings with reciprocal rank fusion.
-- Stored API data is refreshed or deleted within 30 days by a daily compliance job.
+- Stored API data is tracked per field group (`FieldCoverage`). A daily compliance job deletes data past its 30-day
+  deadline and proposes an (approval-gated) refresh beforehand.
 
 See `docs/DECISIONS.md` for the reasoning behind non-obvious choices and `CLAUDE.md` for a code map.
 

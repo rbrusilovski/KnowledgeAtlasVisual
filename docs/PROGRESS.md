@@ -51,19 +51,39 @@ SSE, admin/bull-board.
 - BUILD_SPEC assumes cross-channel aggregation; the developer policies appear to restrict it (III.E.2.a). Kept for
   fixture mode; gated for live data (see COMPLIANCE_DECISIONS.md).
 
-### Roadmap (dependency order) and status
+### Session scope
+The 2026-11-09 session was narrowed by the owner to the **YouTube collection/ingestion subsystem**. Out-of-scope
+findings (Docker, backups, maintenance scripts, Claude tools/MCP, relationship evaluation, general alerts) are in
+`docs/DEFERRED_AUDIT_FINDINGS.md` with a cross-reference of every prompt finding.
+
+### Status (YouTube subsystem)
 | Phase | Scope | Status |
 |---|---|---|
-| 0 | Audit, compliance doc, policy feature gate | in progress |
-| 1 | Transcript ownership/visibility model + authorization everywhere + IDOR tests | pending |
-| 2 | ExpansionProposal model, service, approval routes, producer + worker enforcement, scheduler → proposals | pending |
-| 3 | Full channel/video metadata, thumbnail variants, statistics availability, FieldCoverage + coverage API | pending |
-| 4 | Compliance lifecycle: field-group retention, deadline-aware deletion, approval-gated refresh, revocation purge | pending |
-| 5 | Checkpointed, resumable, bounded upload-history backfill | pending |
-| 6 | Provenance (extractor/model/taxonomy versions, field + chunk evidence), fact vs inference, relationship evaluation | pending |
-| 7 | Agent tokens, Atlas tool service (read + propose), HTTP tool endpoint, MCP stdio adapter | pending |
-| 8 | Prod compose, backups/restore, reset guard, resumable reindex, graph verify, recovery, alerts | pending |
-| UI | Coverage + approvals page, proposal review dialog wired into every expansion action | pending |
+| 0 | Audit, compliance doc, policy feature gate | ✅ done |
+| 1 | Transcript ownership/visibility + authorization on every read path + IDOR tests | ✅ done |
+| 2 | ExpansionProposal model/service/routes, producer + service/worker enforcement, schedulers → proposals | ✅ done |
+| 3 | Full metadata (all API parts), thumbnail variants, statistics availability, FieldCoverage + coverage API | ✅ done |
+| 4 | Compliance lifecycle: field-group retention, deadline-only deletion, approval-gated refresh, revocation/refresh-failure purge | ✅ done |
+| 5 | Checkpointed, resumable, bounded upload-history backfill; bounded sync; bounded discovery | ✅ done |
+| 6 | Provenance for topic extraction (fields, transcript chunks, extractor); Atlas-inferred labels in DTOs | ✅ partial (classification provenance + relationship evaluation deferred: D8, D9) |
+| 7 | Claude tools / MCP | ⏸ deferred (D7) — services are ready to wrap |
+| 8 | Ops hardening | ⏸ deferred (D1–D6, D12) |
+| UI | Proposal review dialog on every expansion action, Data page (coverage + approvals + runs), channel history panel, video coverage + private transcripts | ✅ done |
+
+Verification (2026-11-09, all executed): `pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm test` 105/105 ✅ ·
+`pnpm test:integration` 64/64 ✅ · `pnpm e2e` 12/12 ✅ (first run 11/12 — discover live-status bug, fixed) ·
+`pnpm build` ✅ · client-bundle secret grep clean ✅ · migration applied to a clone of the dev DB with no data loss and
+no Prisma drift ✅ · worker boot + SIGTERM graceful shutdown ✅. The dev database itself has **not** been migrated.
+
+Remaining YouTube-specific gaps:
+- Live client never exercised against the real API in this session (no key; live collection is gated off anyway).
+- Owner captions fetch one preferred track per video (other languages not auto-fetched).
+- Uploads-playlist page tokens are positional; deletions during a long backfill can shift items (drift is visible
+  via `itemsSeen` vs `totalResults`).
+- Discovery previews on `/discover` still spend search quota without a proposal (they add nothing to the corpus;
+  cost confirmation is kept); `DISCOVER_CHANNELS` proposals are available via `/api/expansions` but have no
+  dedicated UI form yet.
+- `localizations` are stored but not surfaced in the UI.
 
 Policy-sensitive (blocked on the owner, infrastructure built): enabling live collection; cross-owner aggregation;
 derived-metrics amendment; Google OAuth verification for `youtube.force-ssl`.

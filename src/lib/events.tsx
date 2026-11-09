@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-export type LiveEventType = "job.progress" | "job.completed" | "job.failed" | "graph.delta" | "quota.updated";
+export type LiveEventType = "job.progress" | "job.completed" | "job.failed" | "graph.delta" | "quota.updated" | "proposal.created" | "proposal.updated";
 export interface LiveEvent {
   id: string;
   type: LiveEventType;
@@ -30,7 +30,7 @@ interface LiveCtx {
 
 const Ctx = createContext<LiveCtx>({ connected: false, subscribe: () => () => {}, jobs: [] });
 
-const VISIBLE_QUEUES = new Set(["ingest-channel", "sync-channel"]);
+const VISIBLE_QUEUES = new Set(["ingest-channel", "sync-channel", "backfill-history", "discover-channels", "refresh-metadata"]);
 
 /** One EventSource per tab; fan-out to subscribers. The browser resends Last-Event-ID on reconnect. */
 export function LiveProvider({ children }: { children: ReactNode }) {
@@ -60,8 +60,12 @@ export function LiveProvider({ children }: { children: ReactNode }) {
         for (const l of listeners.current) l(ev);
         if (type.startsWith("job.")) onJob(ev);
         if (type === "quota.updated") void qc.invalidateQueries({ queryKey: ["quota"] });
+        if (type.startsWith("proposal.")) {
+          void qc.invalidateQueries({ queryKey: ["proposals"] });
+          void qc.invalidateQueries({ queryKey: ["coverage"] });
+        }
       };
-      for (const t of ["job.progress", "job.completed", "job.failed", "graph.delta", "quota.updated"] as const) es.addEventListener(t, handler(t));
+      for (const t of ["job.progress", "job.completed", "job.failed", "graph.delta", "quota.updated", "proposal.created", "proposal.updated"] as const) es.addEventListener(t, handler(t));
     };
     const onJob = (ev: LiveEvent) => {
       const d = ev.data as { jobId: string; queue: string; pct?: number; step?: string; title?: string; error?: string; channel?: string; result?: { videos?: { created?: number } } };

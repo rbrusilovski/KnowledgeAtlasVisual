@@ -153,7 +153,7 @@ export async function channelDetail(id: string) {
       lastStatsAt: true,
       featuredChannelIds: true,
       isAvailable: true,
-      history: { select: { nextPageToken: true } },
+      history: { select: { state: true } },
       niches: { orderBy: { confidence: "desc" }, select: { confidence: true, method: true, lowConfidence: true, rationale: true, niche: { select: { id: true, slug: true, name: true, parent: { select: { slug: true, name: true } } } } } },
     },
   });
@@ -190,7 +190,7 @@ export async function channelDetail(id: string) {
     syncTier: c.syncTier,
     lastSyncedAt: c.lastSyncedAt?.toISOString() ?? null,
     lastRefreshedAt: c.lastRefreshedAt?.toISOString() ?? null,
-    hasMoreHistory: Boolean(c.history?.nextPageToken),
+    hasMoreHistory: Boolean(c.history && ["INITIAL_WINDOW_COLLECTED", "BACKFILL_IN_PROGRESS", "PAUSED_AWAITING_APPROVAL", "FAILED_RETRYABLE"].includes(c.history.state)),
     featuredCount: c.featuredChannelIds.length,
     transcriptCount,
     url: `https://www.youtube.com/channel/${c.youtubeId}`,

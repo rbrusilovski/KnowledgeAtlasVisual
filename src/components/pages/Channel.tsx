@@ -1,5 +1,7 @@
 "use client";
 
+import type { ProposalDTO } from "@/shared/contracts/expansion";
+import { reviewProposal } from "@/components/expansion/ProposalReview";
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -61,7 +63,6 @@ const DURATIONS: [string, string][] = [
 export function ChannelPage({ id }: { id: string }) {
   const q = useQuery({ queryKey: ["channel", id], queryFn: () => api.get<ChannelDetail>(`/api/channels/${id}`) });
   const me = useMe();
-  const qc = useQueryClient();
   const [overrideOpen, setOverrideOpen] = useState(false);
   if (q.isLoading)
     return (
@@ -78,9 +79,7 @@ export function ChannelPage({ id }: { id: string }) {
   const c = q.data!;
   const sync = async (full: boolean) => {
     try {
-      await api.post(`/api/channels/${c.youtubeId}/sync`, { full });
-      toast.success(full ? "Loading full history in the background" : "Sync queued");
-      setTimeout(() => qc.invalidateQueries({ queryKey: ["channel", id] }), 4000);
+      reviewProposal(await api.post<ProposalDTO>(`/api/channels/${c.youtubeId}/sync`, { full }));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Sync failed");
     }
@@ -131,6 +130,7 @@ export function ChannelPage({ id }: { id: string }) {
           ) : null}
         </div>
       </header>
+      <HistoryPanel id={c.youtubeId} />
 
       <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-5">
         <Stat label="Subscribers" value={fmtCompact(c.subscriberCount)} />
@@ -384,5 +384,69 @@ function NicheOverride({ channel, onClose }: { channel: ChannelDetail; onClose: 
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface ChannelCoverage {
+  complete: boolean;
+  groups: { group: string; status: string; reason: string | null; lastSuccessAt: string | null }[];
+  history: { state: string; itemsSeen: number; videosCollected: number; unavailable: number; pagesScanned: number; oldestPublishedAt: string | null; newestPublishedAt: string | null; reportedVideoCount: number | null; remainingEstimate: number | null; hasMore: boolean; lastError: string | null } | null;
+  videos: { total: number; complete: number };
+  proposals: { id: string; kind: string; status: string; title: string }[];
+}
+
+const HISTORY_LABEL: Record<string, string> = {
+  NOT_STARTED: "not started",
+  INITIAL_WINDOW_COLLECTED: "latest uploads collected",
+  BACKFILL_IN_PROGRESS: "collecting older uploads",
+  PAUSED_AWAITING_APPROVAL: "paused — approve another backfill to continue",
+  COMPLETE_TO_SOURCE_LIMIT: "complete",
+  FAILED_RETRYABLE: "interrupted — will resume from its checkpoint",
+  SOURCE_UNAVAILABLE: "no uploads playlist",
+};
+
+/** Upload-history progress + field coverage for this channel (read-only). */
+function HistoryPanel({ id }: { id: string }) {
+  const q = useQuery({ queryKey: ["coverage", "channel", id], queryFn: () => api.get<ChannelCoverage>(`/api/channels/${id}/coverage`) });
+  const c = q.data;
+  if (!c) return null;
+  const h = c.history;
+  return (
+    <section className="mt-5 grid gap-3 rounded-card border border-border bg-bg-1 p-4 text-sm md:grid-cols-[1.3fr_1fr]" data-testid="channel-history">
+      <div>
+        <div className="text-xs text-text-3">Upload history</div>
+        {h ? (
+          <>
+            <div className="mt-1 text-text-1">
+              <span className="num">{h.itemsSeen.toLocaleString()}</span>
+              {h.reportedVideoCount !== null ? <span className="text-text-3"> of {h.reportedVideoCount.toLocaleString()} uploads reported by YouTube</span> : " uploads scanned"} · {HISTORY_LABEL[h.state] ?? h.state}
+            </div>
+            <div className="mt-1 text-xs text-text-3">
+              {h.oldestPublishedAt ? `${fmtDate(h.oldestPublishedAt)} → ${fmtDate(h.newestPublishedAt ?? h.oldestPublishedAt)}` : null}
+              {h.pagesScanned ? ` · ${h.pagesScanned} pages` : ""}
+              {h.unavailable ? ` · ${h.unavailable} private/unavailable` : ""}
+              {h.remainingEstimate ? ` · ~${h.remainingEstimate.toLocaleString()} remaining` : ""}
+            </div>
+            {h.lastError ? <div className="mt-1 text-xs text-warning">{h.lastError}</div> : null}
+          </>
+        ) : (
+          <div className="mt-1 text-text-2">Not collected yet</div>
+        )}
+        {c.proposals.length ? <div className="mt-2 text-xs text-text-2">{c.proposals.length} proposal(s) pending or running for this channel — see <Link href="/data" className="text-accent-300 hover:underline">Data</Link>.</div> : null}
+      </div>
+      <div>
+        <div className="text-xs text-text-3">Videos fully collected</div>
+        <div className="num mt-1 text-text-1">
+          {c.videos.complete.toLocaleString()} / {c.videos.total.toLocaleString()}
+        </div>
+        <div className="mt-1 flex flex-wrap gap-1">
+          {c.groups.map((g) => (
+            <Badge key={g.group} tone={g.status === "PRESENT" ? "success" : g.status === "STALE" || g.status === "NOT_RETURNED" ? "warning" : g.status === "ERROR" ? "danger" : "neutral"} title={g.reason ?? undefined}>
+              {g.group.replace(/_/g, " ").toLowerCase()}
+            </Badge>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }

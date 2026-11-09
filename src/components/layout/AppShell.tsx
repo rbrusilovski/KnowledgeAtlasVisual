@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/misc";
 import { LiveProvider } from "@/lib/events";
 import { TopBar } from "./TopBar";
 import { CommandPalette } from "./CommandPalette";
+import { ProposalReviewHost } from "@/components/expansion/ProposalReview";
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
@@ -15,6 +16,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex min-h-0 flex-1">{children}</div>
         </div>
         <CommandPalette />
+        <ProposalReviewHost />
       </TooltipProvider>
     </LiveProvider>
   );
