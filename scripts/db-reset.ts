@@ -1,14 +1,19 @@
 /**
- * pnpm db:reset — wipes ALL data in the configured database and Redis namespace, re-applies migrations,
- * then re-seeds. Destructive: requires --yes (or ATLAS_RESET_CONFIRM=1).
+ * pnpm db:reset — DEVELOPMENT ONLY. Wipes ALL data in the configured database and Redis namespace, re-applies
+ * migrations, then re-seeds. Refuses production, live mode and non-local hosts (scripts/lib/reset-guard.ts) and
+ * requires --yes (or ATLAS_RESET_CONFIRM=1).
  */
 import "dotenv/config";
 import { execSync } from "node:child_process";
+import { resetRefusal } from "./lib/reset-guard";
 
-if (!process.argv.includes("--yes") && process.env.ATLAS_RESET_CONFIRM !== "1") {
-  console.error("This deletes every row in DATABASE_URL and every Redis key under REDIS_PREFIX.\nRe-run with: pnpm db:reset --yes");
+const refusal = resetRefusal({ env: process.env, argv: process.argv });
+if (refusal) {
+  console.error(`[reset] ${refusal}\nThis deletes every row in DATABASE_URL and every Redis key under REDIS_PREFIX.`);
   process.exit(1);
 }
+const target = new URL(process.env.DATABASE_URL!);
+console.log(`[reset] target ${target.hostname}:${target.port || 5432}${target.pathname}`);
 
 const { db } = await import("@/server/db");
 const { redis, key } = await import("@/server/redis");

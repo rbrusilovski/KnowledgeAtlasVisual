@@ -1,6 +1,7 @@
 import { db } from "@/server/db";
 import { notFound } from "@/server/errors";
 import type { RelatedCreator } from "@/shared/contracts/graph";
+import { EDGE_PROVENANCE } from "./provenance";
 
 const KIND_FACTOR: Record<string, number> = { FEATURED: 1, SIMILAR: 0.9, CO_TOPIC: 0.8, CO_DISCOVERED: 0.3 };
 
@@ -34,7 +35,7 @@ export async function relatedCreators(channelYoutubeId: string, limit = 20): Pro
     }
     const r = acc.get(other) ?? { score: 0, reasons: [] };
     r.score += e.weight * (KIND_FACTOR[e.kind] ?? 0.5);
-    r.reasons.push({ kind: e.kind, text, weight: +e.weight.toFixed(3) });
+    r.reasons.push({ kind: e.kind, text, weight: +e.weight.toFixed(3), label: EDGE_PROVENANCE[e.kind].label, basis: EDGE_PROVENANCE[e.kind].basis });
     acc.set(other, r);
   }
   const ids = [...acc.keys()].map((id) => id.slice(8));
@@ -57,7 +58,7 @@ export async function relatedCreators(channelYoutubeId: string, limit = 20): Pro
   const inDb = new Set((await db.channel.findMany({ where: { youtubeId: { in: self.featuredChannelIds } }, select: { youtubeId: true } })).map((c) => c.youtubeId));
   for (const yt of self.featuredChannelIds) {
     if (known.has(yt) || inDb.has(yt)) continue;
-    out.push({ nodeId: `channel:${yt}`, youtubeId: yt, title: yt, thumbnailUrl: null, subscriberCount: null, inAtlas: false, score: 0.5, reasons: [{ kind: "FEATURED", text: `Featured by ${self.title} (not in atlas yet)`, weight: 1 }] });
+    out.push({ nodeId: `channel:${yt}`, youtubeId: yt, title: yt, thumbnailUrl: null, subscriberCount: null, inAtlas: false, score: 0.5, reasons: [{ kind: "FEATURED", text: `Featured by ${self.title} (not in atlas yet)`, weight: 1, label: "FACT", basis: "youtube-fact" }] });
   }
   return out.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title)).slice(0, limit);
 }

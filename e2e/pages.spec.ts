@@ -31,6 +31,10 @@ test.describe("pages", () => {
   });
 
   test("video page: transcript search jumps to timestamp", async ({ page }) => {
+    // Signed out: transcript text is neither searchable nor readable.
+    const anon = await (await page.request.get("/api/search?q=fundamentals&types=transcript&mode=keyword&limit=1")).json();
+    expect(anon.data).toEqual([]);
+    await signUp(page);
     const r = await (await page.request.get("/api/search?q=fundamentals&types=transcript&mode=keyword&limit=1")).json();
     expect(r.data.length).toBeGreaterThan(0);
     const id: string = r.data[0].nodeId.slice(6);
@@ -80,10 +84,13 @@ test.describe("pages", () => {
     expect(up.status()).toBe(201);
     await page.reload();
     await expect(page.getByTestId("transcript-private")).toBeVisible();
-    // Anonymous visitors don't see it.
+    // Anonymous visitors can't read transcripts at all (sign-in required).
     const anon = await page.context().browser()!.newContext();
-    const r = await (await anon.request.get(`${E2E_ORIGIN}/api/videos/${yt}/transcript`)).json();
-    expect(r.data).toBeNull();
+    expect((await anon.request.get(`${E2E_ORIGIN}/api/videos/${yt}/transcript`)).status()).toBe(401);
+    const anonPage = await anon.newPage();
+    await anonPage.goto(`${E2E_ORIGIN}/videos/${yt}`);
+    await expect(anonPage.getByTestId("transcript-signin")).toBeVisible();
+    await expect(anonPage.getByText("my private notes")).toHaveCount(0);
     await anon.close();
   });
 });

@@ -14,7 +14,7 @@ import { AppError } from "@/server/errors";
 import { enqueue, enqueueExpansion, expansionJobId, type ExpansionAuth, type Lane } from "@/server/jobs";
 import { log } from "@/server/logger";
 import { redis, key } from "@/server/redis";
-import { youtube, youtubeMode, withYouTubeContext, normalizeChannel, normalizeVideo, policyAllows, type YtChannel, type YtVideo } from "@/server/youtube";
+import { youtube, youtubeMode, withYouTubeContext, normalizeChannel, normalizeVideo, policyAllows, type NormalizeOptions, type YtChannel, type YtVideo } from "@/server/youtube";
 import * as quota from "@/server/services/quota";
 import { withLock } from "@/server/services/cache";
 import { publish } from "@/server/services/realtime";
@@ -33,6 +33,9 @@ import {
 import { reserveUserDiscovery, refundUserDiscovery } from "@/server/services/quota";
 import { embedTexts, embedEntities } from "@/server/services/embeddings";
 import { toVectorLiteral } from "@/server/db/vector";
+
+/** Thumbnail provenance: fixture data is never labelled as YouTube API data. */
+const normOpts = (): NormalizeOptions => ({ source: youtubeMode() === "fixture" ? "fixture" : "youtube-data-api" });
 
 export { parseKeywords } from "@/server/youtube";
 
@@ -84,7 +87,7 @@ const TX = { timeout: 60_000, maxWait: 10_000 };
 
 /** Upsert a channel from a channels.list item. Partial responses never erase stored values (normalize.ts). */
 async function upsertChannel(c: YtChannel, aliases: string[], at: Date, tx: Prisma.TransactionClient = db) {
-  const { data, coverage } = normalizeChannel(c);
+  const { data, coverage } = normalizeChannel(c, normOpts());
   const existing = await tx.channel.findUnique({ where: { youtubeId: c.id }, select: { id: true, etag: true } });
   // Handle uniqueness: if another (stale) row holds this handle, release it.
   if (typeof data.handle === "string") await tx.channel.updateMany({ where: { handle: data.handle, NOT: { youtubeId: c.id } }, data: { handle: null } });
@@ -137,7 +140,7 @@ async function upsertVideos(requested: string[], videos: YtVideo[], channelId: s
   const cov: CoverageWrite[] = [];
   for (const v of videos) {
     const prev = byYt.get(v.id);
-    const { data, coverage } = normalizeVideo(v);
+    const { data, coverage } = normalizeVideo(v, normOpts());
     const full = Boolean(v.snippet && v.contentDetails && v.statistics);
     const fresh = { ...(full ? { lastRefreshedAt: at } : {}), ...(v.statistics ? { lastStatsAt: at } : {}), isAvailable: true };
     if (v.snippet?.publishedAt) stats.publishedAts.push(new Date(v.snippet.publishedAt));
@@ -694,7 +697,7 @@ export async function refreshMetadata(input: RefreshInput, ctl: JobControl) {
 }
 
 async function applyChannelStatistics(c: YtChannel, at: Date) {
-  const { data, coverage } = normalizeChannel(c);
+  const { data, coverage } = normalizeChannel(c, normOpts());
   const row = await db.channel.findUnique({ where: { youtubeId: c.id }, select: { id: true } });
   if (!row) return;
   const stats = coverage.filter((g) => g.group === "STATISTICS");
@@ -707,7 +710,7 @@ async function applyChannelStatistics(c: YtChannel, at: Date) {
 }
 
 async function applyVideoStatistics(v: YtVideo, videoId: string, at: Date) {
-  const { data, coverage } = normalizeVideo(v);
+  const { data, coverage } = normalizeVideo(v, normOpts());
   const keys = ["viewCount", "likeCount", "commentCount"] as const;
   const patch = Object.fromEntries(keys.filter((k) => k in data).map((k) => [k, data[k]]));
   await db.$transaction(async (tx) => {

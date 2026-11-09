@@ -13,6 +13,7 @@ import { Dialog, DialogContent, EmptyState, Skeleton, Switch } from "@/component
 import { api } from "@/lib/api";
 import { useMe } from "@/lib/hooks";
 import { fmtDate } from "@/lib/format";
+import { AgentAccess } from "./AgentAccess";
 
 function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
   return (
@@ -107,6 +108,9 @@ export function SettingsPage({ youtubeOAuth }: { youtubeOAuth: boolean }) {
         ) : (
           <Button asChild variant="secondary"><a href="/api/youtube/connect"><Link2 /> Connect YouTube</a></Button>
         )}
+      </Section>
+      <Section title="Agent access" description="Tokens that let Claude inspect Atlas and propose expansions on your behalf.">
+        <AgentAccess />
       </Section>
       <Section title="Your data" description="Export everything Atlas stores about you, or delete your account.">
         <div className="flex flex-wrap gap-2">

@@ -137,8 +137,13 @@ See `docs/DECISIONS.md` for the reasoning behind non-obvious choices and `CLAUDE
 
 ## Production
 
-`docker compose --profile prod up --build` runs `web` and `worker` from the multi-stage `Dockerfile`. Set
-`BETTER_AUTH_URL` to your public URL, add OAuth credentials if wanted, and put `ADMIN_EMAILS` for `/admin` access
-(queue dashboard at `/api/admin/queues`). `/privacy` and `/terms` are **templates** you must adapt.
+`docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build` runs `web`, `worker`, Postgres
+and Redis with no published database ports, required secrets and Redis auth (`docker-compose.yml` is development
+only). Set `BETTER_AUTH_URL` to your public URL, add OAuth credentials if wanted, and put `ADMIN_EMAILS` for `/admin`
+access (queue dashboard at `/api/admin/queues`). Deploy/rollback, encrypted backups (`pnpm db:backup`), restore tests
+(`pnpm db:restore-test`), alerts and recovery tools are in [docs/OPERATIONS.md](docs/OPERATIONS.md).
+
+**Claude**: create an agent token in Settings → Agent access and run `ATLAS_AGENT_TOKEN=atl_… pnpm mcp` (local stdio
+MCP server). Claude can inspect coverage and propose expansions; only you can approve them on `/data`. `/privacy` and `/terms` are **templates** you must adapt.
 
 YouTube data is shown with attribution and links back to YouTube. Atlas never downloads videos or scrapes YouTube pages.

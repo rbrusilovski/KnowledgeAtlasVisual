@@ -11,7 +11,9 @@ Next.js here is v16 — read `node_modules/next/dist/docs/` before using an unfa
 - `pnpm dev` (web + worker) · `pnpm dev:web` · `pnpm worker`
 - `pnpm db:migrate` (deploy) · `pnpm db:migrate:dev` · `pnpm db:seed` · `pnpm db:reset`
 - `pnpm typecheck` · `pnpm lint` · `pnpm test` · `pnpm test:integration` · `pnpm e2e` · `pnpm build`
-- `pnpm fixtures:generate` · `pnpm yt:probe <url|@handle>` · `pnpm graph:rebuild [--topics]` · `pnpm embeddings:reindex`
+- `pnpm fixtures:generate` · `pnpm yt:probe <url|@handle>` · `pnpm graph:rebuild [--topics]` · `pnpm graph:verify [--repair]`
+- `pnpm embeddings:reindex [--all]` (resumable, model-tracked) · `pnpm jobs:recover [--apply]` · `pnpm db:backup` · `pnpm db:restore-test`
+- `pnpm mcp` — stdio MCP adapter for Claude (needs `ATLAS_AGENT_TOKEN`). Ops runbook: `docs/OPERATIONS.md`.
 - `pnpm taxonomy status|reconcile|shadow|apply [--rebuild]|classify|cleanup [--yes <hash>]` (dynamic taxonomy; never calls YouTube)
 - Parallel worktrees share Docker services: isolate runs with `TEST_DATABASE_URL=…/atlas_test_<name>`
   `TEST_REDIS_PREFIX=atlas-test-<name>` (integration) and `E2E_PORT` / `E2E_DATABASE_URL` / `E2E_REDIS_PREFIX` /
@@ -58,3 +60,6 @@ Next.js here is v16 — read `node_modules/next/dist/docs/` before using an unfa
 - Never call `search.list` where a 1-unit call works; never call `captions.list` speculatively.
 - Callbacks registered once in effects must use `useEffectEvent` (stale closures broke pin saving before).
 - BullMQ custom job IDs cannot contain `:`.
+- Vectors are written only via `setVector(…, { model })`; anything comparing vectors must respect `semanticAvailable()`.
+- Code in `readOnly(label, fn)` cannot write to Postgres (Prisma guard in `db.ts`) — agent read tools rely on it.
+- Agents (`/api/agent/*`, bearer tokens) may inspect and propose, never approve; keep it that way.

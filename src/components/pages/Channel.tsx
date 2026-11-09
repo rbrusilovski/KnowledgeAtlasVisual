@@ -42,7 +42,7 @@ interface ChannelDetail {
   lastSyncedAt: string | null;
   hasMoreHistory: boolean;
   transcriptCount: number;
-  niches: { id: string; slug: string; name: string; confidence: number; method: string; lowConfidence: boolean; rationale: string | null; parent: { slug: string; name: string } | null }[];
+  niches: { id: string; slug: string; name: string; confidence: number; method: string; lowConfidence: boolean; rationale: string | null; classifier?: string | null; evidence?: { taxonomyVersion?: string; embeddingModel?: string | null; components?: { embedding: number; keyword: number; topic: number } } | null; parent: { slug: string; name: string } | null }[];
   topics: { nodeId: string; label: string; weight: number; videos: number }[];
   lastRun: { kind: string; startedAt: string; finishedAt: string | null; unitsUsed: number; searchCalls: number } | null;
 }
@@ -204,6 +204,13 @@ export function ChannelPage({ id }: { id: string }) {
               <div key={n.slug} className="text-xs text-text-3">
                 <span className="text-text-2">{n.name}</span> — {(n.confidence * 100).toFixed(0)}% via {n.method.toLowerCase()}
                 {n.rationale ? `: ${n.rationale}` : ""}
+                {n.classifier ? (
+                  <span className="ml-1 font-mono text-[11px] text-text-3" title="Atlas-inferred classification provenance">
+                    · {n.classifier}
+                    {n.evidence?.taxonomyVersion ? ` · ${n.evidence.taxonomyVersion}` : ""}
+                    {n.evidence?.embeddingModel ? ` · ${n.evidence.embeddingModel}` : ""}
+                  </span>
+                ) : null}
               </div>
             ))}
           </TabsContent>

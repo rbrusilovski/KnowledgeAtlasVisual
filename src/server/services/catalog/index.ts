@@ -155,7 +155,7 @@ export async function channelDetail(id: string) {
       isAvailable: true,
       dataOrigin: true,
       history: { select: { state: true } },
-      niches: { orderBy: { confidence: "desc" }, select: { confidence: true, method: true, lowConfidence: true, rationale: true, niche: { select: { id: true, slug: true, name: true, parent: { select: { slug: true, name: true } } } } } },
+      niches: { orderBy: { confidence: "desc" }, select: { confidence: true, method: true, lowConfidence: true, rationale: true, classifier: true, evidence: true, niche: { select: { id: true, slug: true, name: true, parent: { select: { slug: true, name: true } } } } } },
     },
   });
   if (!c) throw notFound("Channel");
@@ -197,7 +197,7 @@ export async function channelDetail(id: string) {
     url: `https://www.youtube.com/channel/${c.youtubeId}`,
     dataOrigin: c.dataOrigin,
     attribution: c.dataOrigin === "FIXTURE" ? "Fictional demo channel (fixture dataset) — not real YouTube data" : "Channel metadata and statistics from the YouTube Data API",
-    niches: c.niches.map((n) => ({ id: n.niche.id, slug: n.niche.slug, name: n.niche.name, parent: n.niche.parent, confidence: n.confidence, method: n.method, lowConfidence: n.lowConfidence, rationale: n.rationale, origin: n.method === "MANUAL" ? "user" : "atlas-inferred" })),
+    niches: c.niches.map((n) => ({ id: n.niche.id, slug: n.niche.slug, name: n.niche.name, parent: n.niche.parent, confidence: n.confidence, method: n.method, lowConfidence: n.lowConfidence, rationale: n.rationale, classifier: n.classifier, evidence: n.evidence, origin: n.method === "MANUAL" ? "user" : "atlas-inferred" })),
     topics: topics.map((t) => ({ id: t.id, nodeId: `topic:${t.slug}`, slug: t.slug, label: t.label, weight: +t.w.toFixed(3), videos: t.videos, origin: "atlas-inferred" })),
     latestVideos: latest.map((v) => ({ ...v, nodeId: `video:${v.youtubeId}`, viewCount: num(v.viewCount), publishedAt: v.publishedAt.toISOString() })),
     lastRun: lastRun && { ...lastRun, startedAt: lastRun.startedAt.toISOString(), finishedAt: lastRun.finishedAt?.toISOString() ?? null },

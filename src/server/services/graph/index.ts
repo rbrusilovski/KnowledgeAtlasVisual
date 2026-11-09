@@ -2,3 +2,6 @@ export { buildDirty, buildFromDirtySet, rebuildAll, allNodeIds, pruneTombstones,
 export { computeCommunities } from "./communities";
 export { getSubgraph, getNeighbors, getDelta, findPath, currentVersion } from "./traversal";
 export { relatedCreators } from "./related";
+export { EDGE_PROVENANCE, edgeProvenance, type EdgeBasis, type EdgeProvenance } from "./provenance";
+export { verifyGraph, type GraphVerifyReport } from "./verify";
+export { evaluateQuality, type QualityReport, type KindQuality } from "./evaluate";

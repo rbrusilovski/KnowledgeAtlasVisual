@@ -176,16 +176,22 @@ export function withRoute<
         }),
       );
 
+      // Personal or agent-scoped responses must never be stored by shared caches or the browser cache (D10).
+      const personal = Boolean(user) || req.headers.has("authorization");
       if (result instanceof Response) {
         result.headers.set("x-request-id", requestId);
+        if (personal && !result.headers.has("cache-control")) result.headers.set("cache-control", "private, no-store");
         return result;
       }
+      const headers: Record<string, string> = { "x-request-id": requestId, ...(personal ? { "cache-control": "private, no-store" } : {}) };
       if (result instanceof WithMeta) {
-        return json({ data: result.data, meta: result.meta }, { status: result.status, headers: { "x-request-id": requestId } });
+        return json({ data: result.data, meta: result.meta }, { status: result.status, headers });
       }
-      return json({ data: result ?? null }, { headers: { "x-request-id": requestId } });
+      return json({ data: result ?? null }, { headers });
     } catch (err) {
-      return errorResponse(err, requestId);
+      const res = errorResponse(err, requestId);
+      res.headers.set("cache-control", "no-store");
+      return res;
     }
   };
 }

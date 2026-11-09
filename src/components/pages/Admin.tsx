@@ -15,13 +15,46 @@ import { Stat } from "@/components/inspector/Inspector";
 import { api } from "@/lib/api";
 import { fmtInt, fmtRelative } from "@/lib/format";
 
+interface AlertDTO {
+  id: string;
+  severity: "critical" | "warning" | "info";
+  title: string;
+  detail: string;
+  action?: string;
+}
+
 interface Overview {
+  alerts: AlertDTO[];
   quota: { day: string; buckets: { bucket: string; used: number; limit: number; exhausted: boolean }[]; methods: { bucket: string; method: string; calls: number; units: number }[] }[];
   runs: { id: string; kind: string; targetId: string; status: string; unitsUsed: number; searchCalls: number; startedAt: string; finishedAt: string | null; error: string | null }[];
   queues: Record<string, Record<string, number>>;
   failed: { queue: string; id: string; failedReason: string; attemptsMade: number; finishedOn: string | null }[];
   ai: { used: number; budget: number };
   totals: Record<string, number>;
+}
+
+function Alerts({ alerts }: { alerts: AlertDTO[] }) {
+  return (
+    <section className="mt-8" data-testid="admin-alerts">
+      <h2 className="mb-2 text-base text-text-1">Alerts</h2>
+      {alerts.length === 0 ? (
+        <p className="text-sm text-text-3">No active alerts.</p>
+      ) : (
+        <ul className="divide-y divide-border rounded-card border border-border">
+          {alerts.map((a) => (
+            <li key={a.id} className="flex flex-wrap items-start gap-3 px-4 py-3 text-sm">
+              <Badge tone={a.severity === "critical" ? "danger" : a.severity === "warning" ? "warning" : "neutral"}>{a.severity}</Badge>
+              <div className="min-w-0 flex-1">
+                <div className="text-text-1">{a.title}</div>
+                {a.detail ? <div className="text-xs text-text-3">{a.detail}</div> : null}
+                {a.action ? <div className="mt-0.5 text-xs text-text-2">→ {a.action}</div> : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
 }
 
 export function AdminPage() {
@@ -39,6 +72,7 @@ export function AdminPage() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
         {Object.entries(d.totals).map(([k, v]) => <Stat key={k} label={k} value={fmtInt(v)} />)}
       </div>
+      <Alerts alerts={d.alerts} />
       <SuggestedSubniches />
       <h2 className="mb-2 mt-8 text-base text-text-1">Quota history (Pacific days)</h2>
       <div className="overflow-x-auto rounded-card border border-border">

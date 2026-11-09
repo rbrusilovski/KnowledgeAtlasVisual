@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Database, ShieldAlert } from "lucide-react";
@@ -183,7 +184,25 @@ function Proposals({ status }: { status: string }) {
   return <ul className="rounded-card border border-border bg-bg-1">{rows.map((p) => <ProposalRow key={p.id} p={p} />)}</ul>;
 }
 
+/** `/data?proposal=<id>` (the link Claude's proposal tool returns) opens that proposal's review dialog once. */
+function useProposalDeepLink() {
+  const sp = useSearchParams();
+  const id = sp.get("proposal");
+  const opened = useRef<string | null>(null);
+  const q = useQuery({ queryKey: ["proposal", id], queryFn: () => api.get<ProposalDTO>(`/api/expansions/${id}`), enabled: Boolean(id) });
+  useEffect(() => {
+    if (q.data && opened.current !== q.data.id) {
+      opened.current = q.data.id;
+      reviewProposal(q.data);
+    }
+  }, [q.data]);
+  useEffect(() => {
+    if (q.error) toast.error(q.error instanceof Error ? q.error.message : "Proposal not found");
+  }, [q.error]);
+}
+
 export function DataPage() {
+  useProposalDeepLink();
   const [niche, setNiche] = useState("");
   const atlas = useQuery({ queryKey: ["coverage", "atlas"], queryFn: () => api.get<Coverage>("/api/coverage"), refetchInterval: 30_000 });
   const nicheCov = useQuery({ queryKey: ["coverage", "niche", niche], queryFn: () => api.get<Omit<Coverage, "policy">>(`/api/coverage/niches/${niche}`), enabled: Boolean(niche) });

@@ -42,7 +42,7 @@ describe("private transcripts", () => {
     const mine = (await body(await get(alice.cookie))).data as { id: string; mine: boolean; visibility: string };
     expect(mine).toMatchObject({ id: aliceTranscriptId, mine: true, visibility: "PRIVATE" });
     expect((await body(await get(bob.cookie))).data).toBeNull();
-    expect((await body(await get())).data).toBeNull();
+    expect((await get()).status).toBe(401);
     // Asking for the id explicitly doesn't help either.
     const direct = await transcriptRoute.GET(req(`/api/videos/${video.youtubeId}/transcript?transcriptId=${aliceTranscriptId}`, { cookie: bob.cookie }), ctx({ id: video.youtubeId }));
     expect((await body(direct)).data).toBeNull();
@@ -58,6 +58,20 @@ describe("private transcripts", () => {
     expect((await detail(alice.cookie)).transcripts).toHaveLength(1);
     expect((await detail(bob.cookie)).transcripts).toHaveLength(0);
     expect((await detail(bob.cookie)).hasTranscript).toBe(false);
+  });
+
+  it("the 'My transcripts' scope returns only the viewer's own private transcripts, never cached (D10, D11)", async () => {
+    const mine = (cookie?: string) => searchRoute.GET(req(`/api/search?q=${encodeURIComponent("zanzibar quokka")}&mode=keyword&transcripts=mine`, { cookie }), ctx({}));
+    const a = await mine(alice.cookie);
+    expect(a.headers.get("cache-control")).toBe("private, no-store");
+    const hits = (await body(a)).data as { type: string }[];
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.type).toBe("transcript");
+    expect((await body(await mine(bob.cookie))).data).toHaveLength(0);
+    expect((await mine()).status).toBe(401);
+    // The shared corpus never appears in the "mine" scope.
+    const corpus = (await body(await searchRoute.GET(req(`/api/search?q=welcome&mode=keyword&transcripts=mine`, { cookie: bob.cookie }), ctx({})))).data as unknown[];
+    expect(corpus).toHaveLength(0);
   });
 
   it("another user's upload for the same video/language does not overwrite it", async () => {
@@ -95,8 +109,17 @@ describe("private transcripts", () => {
     expect(fx).toMatchObject({ visibility: "CORPUS", ownerUserId: null, ownerKey: "corpus" });
     expect(fx.video.hasTranscript).toBe(true);
     expect(fx.video.transcriptStatus).toBe("AVAILABLE");
-    const anon = (await body(await transcriptRoute.GET(req(`/api/videos/${fx.video.youtubeId}/transcript`), ctx({ id: fx.video.youtubeId })))).data as { source: string };
-    expect(anon.source).toBe("FIXTURE");
+    // Plan Phase 0: the transcript endpoint requires sign-in, even for the shared corpus.
+    const anon = await transcriptRoute.GET(req(`/api/videos/${fx.video.youtubeId}/transcript`), ctx({ id: fx.video.youtubeId }));
+    expect(anon.status).toBe(401);
+    const carol = await signUp("carol@atlas.test");
+    const signedIn = (await body(await transcriptRoute.GET(req(`/api/videos/${fx.video.youtubeId}/transcript`, { cookie: carol.cookie }), ctx({ id: fx.video.youtubeId })))).data as { source: string };
+    expect(signedIn.source).toBe("FIXTURE");
+    // …and search follows the same rule: no transcript hits for anonymous callers, corpus hits once signed in.
+    const phrase = (await db.transcriptChunk.findFirstOrThrow({ where: { transcriptId: fx.id }, select: { text: true } })).text.split(/\s+/).filter((w) => w.length > 6)[0]!;
+    const hits = async (cookie?: string) => (await body(await searchRoute.GET(req(`/api/search?q=${encodeURIComponent(phrase)}&types=transcript&mode=keyword`, { cookie }), ctx({})))).data as unknown[];
+    expect(await hits()).toHaveLength(0);
+    expect((await hits(carol.cookie)).length).toBeGreaterThan(0);
   });
 
   it("revoking one user's YouTube connection purges only that connection's captions", async () => {

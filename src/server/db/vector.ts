@@ -14,15 +14,22 @@ export function parseVector(s: string | null): number[] | null {
 export type VectorTable = "Channel" | "Video" | "Topic" | "TranscriptChunk" | "Niche";
 const COLUMN: Record<VectorTable, string> = { Channel: "embedding", Video: "embedding", Topic: "embedding", TranscriptChunk: "embedding", Niche: "centroid" };
 
-export async function setVector(table: VectorTable, id: string, v: number[], extra?: { embeddingHash?: string }) {
+/**
+ * Writes a vector and the vector space it belongs to (`embeddingModel`, D4). `model` is required so no code path can
+ * store a vector without recording which model produced it.
+ */
+export async function setVector(table: VectorTable, id: string, v: number[], extra: { model: string; embeddingHash?: string }) {
   const col = COLUMN[table];
   const lit = toVectorLiteral(v);
-  if (extra?.embeddingHash !== undefined && (table === "Channel" || table === "Video")) {
-    await db.$executeRawUnsafe(`UPDATE "${table}" SET "${col}" = $1::vector, "embeddingHash" = $2 WHERE id = $3`, lit, extra.embeddingHash, id);
+  if (extra.embeddingHash !== undefined && (table === "Channel" || table === "Video")) {
+    await db.$executeRawUnsafe(`UPDATE "${table}" SET "${col}" = $1::vector, "embeddingModel" = $2, "embeddingHash" = $3 WHERE id = $4`, lit, extra.model, extra.embeddingHash, id);
   } else {
-    await db.$executeRawUnsafe(`UPDATE "${table}" SET "${col}" = $1::vector WHERE id = $2`, lit, id);
+    await db.$executeRawUnsafe(`UPDATE "${table}" SET "${col}" = $1::vector, "embeddingModel" = $2 WHERE id = $3`, lit, extra.model, id);
   }
 }
+
+export const VECTOR_TABLES: VectorTable[] = ["Niche", "Topic", "Video", "TranscriptChunk", "Channel"];
+export const vectorColumn = (t: VectorTable) => COLUMN[t];
 
 export async function getVector(table: VectorTable, id: string): Promise<number[] | null> {
   const col = COLUMN[table];

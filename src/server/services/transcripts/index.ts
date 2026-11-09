@@ -28,6 +28,8 @@ export const CORPUS_OWNER_KEY = "corpus";
 
 export interface Viewer {
   userId: string | null;
+  /** Only the viewer's own private transcripts ("My transcripts" search scope, D11). */
+  onlyOwn?: boolean;
 }
 
 /** Shared-corpus transcripts: fixture transcripts only in fixture mode (never mixed into live data). */
@@ -36,12 +38,14 @@ export function corpusWhere(): Prisma.TranscriptWhereInput {
 }
 
 export function visibleWhere(viewer: Viewer): Prisma.TranscriptWhereInput {
+  if (viewer.onlyOwn) return viewer.userId ? { visibility: "PRIVATE", ownerUserId: viewer.userId } : { id: { in: [] } };
   return viewer.userId ? { OR: [corpusWhere(), { visibility: "PRIVATE", ownerUserId: viewer.userId }] } : corpusWhere();
 }
 
 /** SQL twin of `visibleWhere` for raw queries; `alias` is the Transcript table alias. */
 export function visibleSql(viewer: Viewer, alias = "t"): Prisma.Sql {
   const t = Prisma.raw(`"${alias}"`);
+  if (viewer.onlyOwn) return viewer.userId ? Prisma.sql`(${t}.visibility = 'PRIVATE' AND ${t}."ownerUserId" = ${viewer.userId})` : Prisma.sql`false`;
   const corpus = youtubeMode() === "fixture" ? Prisma.sql`${t}.visibility = 'CORPUS'` : Prisma.sql`(${t}.visibility = 'CORPUS' AND ${t}.source <> 'FIXTURE')`;
   return viewer.userId ? Prisma.sql`(${corpus} OR (${t}.visibility = 'PRIVATE' AND ${t}."ownerUserId" = ${viewer.userId}))` : corpus;
 }

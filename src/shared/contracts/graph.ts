@@ -77,5 +77,6 @@ export interface RelatedCreator {
   subscriberCount: number | null;
   inAtlas: boolean;
   score: number;
-  reasons: { kind: string; text: string; weight: number }[];
+  /** `label`: FACT for YouTube-stated relations (featured channels), INFERRED for Atlas-generated ones. */
+  reasons: { kind: string; text: string; weight: number; label: "FACT" | "INFERRED"; basis: string }[];
 }

@@ -57,6 +57,21 @@ describe("intelligence + graph pipeline (fixture mode)", () => {
     expect(c.niches.map((n) => n.niche.slug)).toContain("devops-cloud");
   });
 
+  it("records classification provenance (classifier, taxonomy + embedding versions, score components, sources)", async () => {
+    const { CLASSIFIER_VERSION, TAXONOMY_VERSION, WEIGHTS } = await import("@/server/services/classification");
+    const c = await db.channel.findUniqueOrThrow({ where: { youtubeId: channels[2]! }, include: { niches: { orderBy: { confidence: "desc" } } } });
+    const n = c.niches[0]!;
+    expect(n.classifier).toBe(CLASSIFIER_VERSION);
+    const ev = n.evidence as Record<string, unknown> & { components: Record<string, number>; sourceVideoIds: string[] };
+    expect(ev.origin).toBe("atlas-inferred");
+    expect(ev.taxonomyVersion).toBe(TAXONOMY_VERSION);
+    expect(ev.embeddingModel).toMatch(/^hash@384$/);
+    expect(ev.confidence).toBe(n.confidence);
+    const recombined = WEIGHTS.embedding * ev.components.embedding! + WEIGHTS.keyword * ev.components.keyword! + WEIGHTS.topic * ev.components.topic!;
+    expect(recombined).toBeCloseTo(n.confidence, 3);
+    expect(ev.sourceVideoIds.length).toBeGreaterThan(0);
+  });
+
   it("materializes topics (≥ 2 videos) and topic nodes", async () => {
     expect(await db.topic.count({ where: { videoCount: { gte: 2 } } })).toBeGreaterThan(10);
     expect(await db.graphNode.count({ where: { type: "TOPIC" } })).toBe(await db.topic.count({ where: { videoCount: { gte: 2 } } }));
@@ -129,6 +144,27 @@ describe("intelligence + graph pipeline (fixture mode)", () => {
     const all = await Promise.all(channels.map((c) => relatedCreators(c)));
     const withReasons = all.flat().filter((r) => r.reasons.length);
     for (const r of withReasons) expect(r.reasons[0]!.text.length).toBeGreaterThan(5);
+    for (const r of withReasons) for (const reason of r.reasons) expect(reason.label).toBe(reason.kind === "FEATURED" ? "FACT" : "INFERRED");
+  });
+
+  it("evaluates relationship + classification quality against fixture labels, with stability across runs (D8)", async () => {
+    const { evaluateQuality } = await import("@/server/services/graph");
+    const first = await evaluateQuality();
+    expect(first.goldSource).toBe("fixture-labels");
+    expect(first.labelledChannels).toBe(channels.length);
+    expect(first.kinds.map((k) => k.kind)).toEqual(["SIMILAR", "CO_TOPIC", "CO_DISCOVERED", "FEATURED"]);
+    for (const k of first.kinds) {
+      for (const v of [k.precision, k.recall, k.precisionParent, k.evidenceRate]) {
+        if (v === null) continue;
+        expect(v).toBeGreaterThanOrEqual(0);
+        expect(v).toBeLessThanOrEqual(1);
+      }
+    }
+    expect(first.classification.evaluated).toBe(channels.length);
+    expect(first.classification.top1).toBeGreaterThan(0.5);
+    expect(first.similarSweep?.length).toBe(9);
+    const second = await evaluateQuality();
+    for (const k of second.kinds) expect(k.stability).toBe(1);
   });
 
   it("finds a path between two channels through the taxonomy/topics", async () => {

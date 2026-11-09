@@ -1,3 +1,7 @@
+# DEVELOPMENT ONLY. Local Postgres + Redis for `pnpm dev`, tests and e2e.
+# Ports are bound to 127.0.0.1 so nothing on the network can reach them, and the fixed `atlas/atlas` credentials are
+# for this local container only. Production uses docker-compose.prod.yml (no published DB/Redis ports, required
+# secrets, Redis auth) — see docs/OPERATIONS.md.
 services:
   postgres:
     image: pgvector/pgvector:pg17
@@ -6,7 +10,7 @@ services:
       POSTGRES_PASSWORD: atlas
       POSTGRES_DB: atlas
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -17,7 +21,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redisdata:/data
@@ -26,27 +30,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
-  web:
-    profiles: ["prod"]
-    build: { context: ., target: web }
-    env_file: .env
-    environment:
-      DATABASE_URL: postgresql://atlas:atlas@postgres:5432/atlas
-      REDIS_URL: redis://redis:6379
-    ports: ["3000:3000"]
-    depends_on:
-      postgres: { condition: service_healthy }
-      redis: { condition: service_healthy }
-  worker:
-    profiles: ["prod"]
-    build: { context: ., target: worker }
-    env_file: .env
-    environment:
-      DATABASE_URL: postgresql://atlas:atlas@postgres:5432/atlas
-      REDIS_URL: redis://redis:6379
-    depends_on:
-      postgres: { condition: service_healthy }
-      redis: { condition: service_healthy }
 volumes:
   pgdata:
   redisdata:

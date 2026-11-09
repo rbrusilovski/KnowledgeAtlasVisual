@@ -15,6 +15,7 @@ import { env } from "@/server/env";
 import { enqueue } from "@/server/jobs";
 import { log } from "@/server/logger";
 import { parseVector, setVector } from "@/server/db/vector";
+import { embeddingModelId } from "@/server/services/embeddings";
 import { slugify, trigramSimilarity, normalizePhrase } from "@/server/services/topics";
 import { allowed as policyAllows } from "@/server/youtube/policy";
 import { kmeans, enforceSupport, agglomerate, termChannelStats, corpusRatios, leaderClusters, nearest, meanNormalized, dot, clusterTerms, nameFromTerms, type Vec, type NamingDoc } from "./clustering";
@@ -63,6 +64,8 @@ export const TAXONOMY_CONFIG = {
 } as const;
 
 const LOCK_KEY = 0x7a7a0001;
+/** ChannelNiche.classifier for labels projected from video evidence. */
+export const PROJECTION_CLASSIFIER = "taxonomy-projection@1";
 
 export const dynamicMode = () => env.TAXONOMY_MODE === "dynamic";
 
@@ -295,7 +298,7 @@ export async function bootstrapTaxonomy(opts: { shadow: boolean; rebuild?: boole
       { timeout: 120_000 },
     );
     for (const c of result.centroids) {
-      await setVector("Niche", c.id, c.v);
+      await setVector("Niche", c.id, c.v, { model: embeddingModelId() });
       await db.niche.update({ where: { id: c.id }, data: { centroidCount: c.n } });
     }
     const channels = await projectChannels();
@@ -408,7 +411,7 @@ export async function classifyVideos(videoIds: string[]): Promise<ClassifyResult
             const s = subs.find((x) => x.id === id)!;
             const w = Math.max(1, s.centroidCount);
             const next = meanNormalized([s.v.map((x) => x * w), ...vs]);
-            await tx.$executeRaw`UPDATE "Niche" SET centroid = ${`[${next.join(",")}]`}::vector, "centroidCount" = "centroidCount" + ${vs.length} WHERE id = ${id}`;
+            await tx.$executeRaw`UPDATE "Niche" SET centroid = ${`[${next.join(",")}]`}::vector, "embeddingModel" = ${embeddingModelId()}, "centroidCount" = "centroidCount" + ${vs.length} WHERE id = ${id}`;
           }
         }
         await grow(tx, subs, mean, run.id, out, dirty, touchedChannels);
@@ -468,7 +471,7 @@ async function grow(tx: Tx, subs: Awaited<ReturnType<typeof activeSubs>>, mean: 
         const slug = taken.has(slugify(topName.toLowerCase())) ? `${slugify(topName.toLowerCase())}-${taken.size}` : slugify(topName.toLowerCase());
         taken.add(slug);
         const row = await tx.niche.create({ data: { slug, name: topName, description: describe(members.length, {}), keywords: (terms ?? []).map((t) => t.term), discoveryQueries: [], depth: 0, origin: "DYNAMIC", status: "ACTIVE", createdByRunId: runId, centroidCount: members.length }, select: { id: true } });
-        await tx.$executeRaw`UPDATE "Niche" SET centroid = ${`[${c.join(",")}]`}::vector WHERE id = ${row.id}`;
+        await tx.$executeRaw`UPDATE "Niche" SET centroid = ${`[${c.join(",")}]`}::vector, "embeddingModel" = ${embeddingModelId()} WHERE id = ${row.id}`;
         parent = { id: row.id, slug, name: topName, c: "", v: c };
         tops.push(parent);
         topsC.push(cc);
@@ -483,7 +486,7 @@ async function grow(tx: Tx, subs: Awaited<ReturnType<typeof activeSubs>>, mean: 
         data: { slug, name, description: describe(members.length, {}), keywords: (terms ?? []).map((t) => t.term), discoveryQueries: [], depth: 1, parentId: parent.id, origin: "DYNAMIC", status: "ACTIVE", createdByRunId: runId, centroidCount: members.length },
         select: { id: true },
       });
-      await tx.$executeRaw`UPDATE "Niche" SET centroid = ${`[${c.join(",")}]`}::vector WHERE id = ${row.id}`;
+      await tx.$executeRaw`UPDATE "Niche" SET centroid = ${`[${c.join(",")}]`}::vector, "embeddingModel" = ${embeddingModelId()} WHERE id = ${row.id}`;
       subs.push({ id: row.id, slug, name, parentId: parent.id, centroidCount: members.length, c: "", v: c });
       subVecsC.push(cc);
       out.createdSubniches.push(slug);
@@ -534,7 +537,7 @@ export async function projectChannels(channelIds?: string[]): Promise<{ channels
     for (const b of ch.niches) dirty.add(`subniche:${b.niche.slug}`);
     await db.$transaction([
       db.channelNiche.deleteMany({ where: { channelId: ch.id } }),
-      db.channelNiche.createMany({ data: picks.map((p) => ({ channelId: ch.id, nicheId: p.nicheId, confidence: p.confidence, method: "EMBEDDING" as const, lowConfidence: p.confidence < 0.2, rationale: `${p.n} of ${p.total} videos (${Math.round(p.confidence * 100)}%)` })) }),
+      db.channelNiche.createMany({ data: picks.map((p) => ({ channelId: ch.id, nicheId: p.nicheId, confidence: p.confidence, method: "EMBEDDING" as const, lowConfidence: p.confidence < 0.2, rationale: `${p.n} of ${p.total} videos (${Math.round(p.confidence * 100)}%)`, classifier: PROJECTION_CLASSIFIER, evidence: { origin: "atlas-inferred", classifier: PROJECTION_CLASSIFIER, videos: p.n, channelVideos: p.total, share: p.confidence, taxonomyVersion: TAXONOMY_CONFIG.version, embeddingModel: env.EMBEDDING_MODEL, classifiedAt: new Date().toISOString() } })) }),
     ]);
     for (const p of picks) dirty.add(`subniche:${p.slug}`);
     dirty.add(`channel:${ch.youtubeId}`);

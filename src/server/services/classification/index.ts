@@ -4,7 +4,8 @@
  * Multi-label (≤ 3 above CLASSIFY_MIN_CONFIDENCE), the best is always kept (flagged low-confidence if below).
  * MANUAL assignments always win and survive reclassification. Centroids drift as a running mean of confident members.
  */
-import { db, type ClassMethod } from "@/server/db";
+import { createHash } from "node:crypto";
+import { db, type ClassMethod, type Prisma } from "@/server/db";
 import { env } from "@/server/env";
 import { redis, key } from "@/server/redis";
 import { enqueue } from "@/server/jobs";
@@ -15,9 +16,36 @@ import { aiEnabled, rerankNiche } from "@/server/services/ai";
 import { TAXONOMY } from "@/server/taxonomy";
 import { dynamicMode, projectChannels, recomputeTaxonomyCounts } from "@/server/services/taxonomy";
 import { allowed as policyAllows } from "@/server/youtube/policy";
+import { embeddingModelId as currentEmbeddingModel, semanticAvailable } from "@/server/services/embeddings";
 
 export const WEIGHTS = { embedding: 0.55, keyword: 0.25, topic: 0.2 } as const;
 const MAX_LABELS = 3;
+
+/** Bumped whenever the scoring formula or label selection changes. */
+export const CLASSIFIER_VERSION = "hybrid@1";
+/** Content hash of the seed taxonomy (subniche slugs, keywords, topic-category map) — changes when the taxonomy does. */
+export const TAXONOMY_VERSION = `tax-${createHash("sha1")
+  .update(JSON.stringify(TAXONOMY.map((n) => [n.slug, n.topicCategories, n.children.map((c) => [c.slug, c.keywords])])))
+  .digest("hex")
+  .slice(0, 10)}`;
+
+/** Provenance stored on ChannelNiche.evidence. Always Atlas-inferred, never official YouTube metadata. */
+export interface ClassificationEvidence {
+  origin: "atlas-inferred" | "user-authored";
+  classifier: string;
+  taxonomyVersion: string;
+  embeddingModel: string | null;
+  confidence: number;
+  components?: { embedding: number; keyword: number; topic: number; rawCosine: number; weights: typeof WEIGHTS };
+  matchedKeywords?: string[];
+  matchedTopicCategories?: string[];
+  sourceFields?: string[];
+  sourceVideoIds?: string[];
+  threshold?: number;
+  model?: string;
+  setByUserId?: string;
+  classifiedAt: string;
+}
 /** Seed descriptions count as this many members in the running-mean centroid. */
 const SEED_WEIGHT = 3;
 
@@ -86,6 +114,8 @@ export interface Assignment {
   method: ClassMethod;
   lowConfidence: boolean;
   rationale: string;
+  classifier: string;
+  evidence: ClassificationEvidence;
 }
 
 /** Pick ≤ 3 labels above threshold; always keep the best (flag low-confidence). */
@@ -123,11 +153,12 @@ export async function scoreChannel(channelId: string) {
     select: { id: true, youtubeId: true, title: true, description: true, keywords: true, topicCategories: true },
   });
   if (!c) return null;
-  const recent = await db.video.findMany({ where: { channelId }, orderBy: { publishedAt: "desc" }, take: 30, select: { title: true, tags: true } });
+  const recent = await db.video.findMany({ where: { channelId }, orderBy: { publishedAt: "desc" }, take: 30, select: { youtubeId: true, title: true, tags: true } });
   const text = [c.title, c.description, c.keywords.join(" . "), ...recent.map((r) => `${r.title} . ${r.tags.join(" . ")}`)].join(" . ");
   const subs = await subnicheProfiles();
   const kw = keywordScores(text, subs);
-  const vec = await getVector("Channel", channelId);
+  // Only compare with niche centroids when every stored vector comes from the same model (D4).
+  const vec = (await semanticAvailable()) ? await getVector("Channel", channelId) : null;
   const cos = new Map<string, number>();
   if (vec) {
     const rows = await db.$queryRaw<{ id: string; cos: number }[]>`
@@ -137,9 +168,11 @@ export async function scoreChannel(channelId: string) {
   const channelNiches = new Set(c.topicCategories.flatMap((u) => TOPIC_CATEGORY_MAP.get(u) ?? []));
   const ranked = subs.map((s) => {
     const parts = { embedding: rescaleCosine(cos.get(s.id) ?? 0), keyword: kw.get(s.id)?.score ?? 0, topic: channelNiches.has(s.parentSlug) ? 1 : 0 };
-    return { sub: s, parts, confidence: combine(parts), matched: kw.get(s.id)?.matched ?? [], rawCos: cos.get(s.id) ?? 0 };
+    const topicUrls = c.topicCategories.filter((u) => (TOPIC_CATEGORY_MAP.get(u) ?? []).includes(s.parentSlug));
+    return { sub: s, parts, confidence: combine(parts), matched: kw.get(s.id)?.matched ?? [], rawCos: cos.get(s.id) ?? 0, topicUrls };
   });
-  return { channel: c, ranked, hasEmbedding: Boolean(vec), recentTitles: recent.map((r) => r.title), vec };
+  const embeddingModel = vec ? currentEmbeddingModel() : null;
+  return { channel: c, ranked, hasEmbedding: Boolean(vec), recentTitles: recent.map((r) => r.title), recentVideoIds: recent.map((r) => r.youtubeId), vec, embeddingModel };
 }
 
 async function updateCentroid(nicheId: string, channelId: string, vec: number[]) {
@@ -152,7 +185,7 @@ async function updateCentroid(nicheId: string, channelId: string, vec: number[])
   if (!row || !current) return;
   const w = row.centroidCount + SEED_WEIGHT;
   const next = normalize(current.map((x, i) => x * w + vec[i]!));
-  await setVector("Niche", nicheId, next);
+  await setVector("Niche", nicheId, next, { model: currentEmbeddingModel() });
   await db.niche.update({ where: { id: nicheId }, data: { centroidCount: { increment: 1 } } });
 }
 
@@ -187,6 +220,9 @@ export async function classifyChannel(channelId: string): Promise<{ assignments:
   if (!scored) return null;
   const threshold = env.CLASSIFY_MIN_CONFIDENCE;
   const method: ClassMethod = scored.hasEmbedding ? "EMBEDDING" : "RULES";
+  const classifiedAt = new Date().toISOString();
+  const base = { origin: "atlas-inferred" as const, taxonomyVersion: TAXONOMY_VERSION, embeddingModel: scored.embeddingModel, threshold, classifiedAt };
+  const sourceFields = ["youtube.channel.title", "youtube.channel.description", "youtube.channel.keywords", "youtube.channel.topicCategories", "youtube.video.title", "youtube.video.tags"];
   let picks = selectLabels(scored.ranked, threshold).map<Assignment>((r) => ({
     nicheId: r.sub.id,
     slug: r.sub.slug,
@@ -194,6 +230,17 @@ export async function classifyChannel(channelId: string): Promise<{ assignments:
     method,
     lowConfidence: r.lowConfidence,
     rationale: `embedding ${r.rawCos.toFixed(2)} · keywords ${r.parts.keyword.toFixed(2)}${r.matched.length ? ` (${r.matched.slice(0, 4).join(", ")})` : ""}${r.parts.topic ? " · topic category match" : ""}`,
+    classifier: CLASSIFIER_VERSION,
+    evidence: {
+      ...base,
+      classifier: CLASSIFIER_VERSION,
+      confidence: r.confidence,
+      components: { ...r.parts, rawCosine: +r.rawCos.toFixed(4), weights: WEIGHTS },
+      matchedKeywords: r.matched.slice(0, 20),
+      matchedTopicCategories: r.topicUrls,
+      sourceFields,
+      sourceVideoIds: scored.recentVideoIds,
+    },
   }));
 
   if (aiEnabled() && picks[0]?.lowConfidence) {
@@ -202,7 +249,9 @@ export async function classifyChannel(channelId: string): Promise<{ assignments:
       const ai = await rerankNiche({ title: scored.channel.title, description: scored.channel.description, keywords: scored.channel.keywords, recentTitles: scored.recentTitles }, candidates);
       if (ai) {
         const sub = candidates.find((c) => c.slug === ai.slug)!;
-        picks = [{ nicheId: sub.id, slug: sub.slug, confidence: Math.max(ai.confidence, picks[0]!.confidence), method: "AI", lowConfidence: ai.confidence < threshold, rationale: ai.rationale }];
+        const confidence = Math.max(ai.confidence, picks[0]!.confidence);
+        const classifier = `ai:${env.ANTHROPIC_MODEL}`;
+        picks = [{ nicheId: sub.id, slug: sub.slug, confidence, method: "AI", lowConfidence: ai.confidence < threshold, rationale: ai.rationale, classifier, evidence: { ...base, classifier, model: env.ANTHROPIC_MODEL, confidence, sourceFields, sourceVideoIds: scored.recentVideoIds, matchedKeywords: picks[0]!.evidence.matchedKeywords } }];
       }
     } catch (err) {
       log().warn({ err, channelId }, "AI niche re-rank failed; keeping embedding result");
@@ -212,7 +261,7 @@ export async function classifyChannel(channelId: string): Promise<{ assignments:
   await db.$transaction([
     db.channelNiche.deleteMany({ where: { channelId } }),
     db.channelNiche.createMany({
-      data: picks.map((p) => ({ channelId, nicheId: p.nicheId, confidence: p.confidence, method: p.method, lowConfidence: p.lowConfidence, rationale: p.rationale })),
+      data: picks.map((p) => ({ channelId, nicheId: p.nicheId, confidence: p.confidence, method: p.method, lowConfidence: p.lowConfidence, rationale: p.rationale, classifier: p.classifier, evidence: p.evidence as unknown as Prisma.InputJsonValue })),
     }),
   ]);
   if (scored.vec) {
@@ -238,7 +287,17 @@ export async function setManualNiches(channelId: string, nicheIdsOrSlugs: string
   } else {
     await db.$transaction([
       db.channelNiche.deleteMany({ where: { channelId } }),
-      db.channelNiche.createMany({ data: niches.map((n) => ({ channelId, nicheId: n.id, confidence: 1, method: "MANUAL" as const, rationale: `Set manually by user ${userId}` })) }),
+      db.channelNiche.createMany({
+        data: niches.map((n) => ({
+          channelId,
+          nicheId: n.id,
+          confidence: 1,
+          method: "MANUAL" as const,
+          rationale: `Set manually by user ${userId}`,
+          classifier: "manual",
+          evidence: { origin: "user-authored", classifier: "manual", taxonomyVersion: TAXONOMY_VERSION, embeddingModel: null, confidence: 1, setByUserId: userId, classifiedAt: new Date().toISOString() } satisfies ClassificationEvidence as unknown as Prisma.InputJsonValue,
+        })),
+      }),
     ]);
     await recomputeNicheCounts();
   }

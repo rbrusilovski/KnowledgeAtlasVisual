@@ -7,6 +7,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/server/db";
 import { env } from "@/server/env";
 import { setVector } from "@/server/db/vector";
+import { embeddingModelId } from "@/server/services/embeddings";
 import { seedTaxonomy } from "@/server/services/classification";
 import { classifyChannel } from "@/server/services/classification";
 import { buildDirty, buildFromDirtySet } from "@/server/services/graph";
@@ -34,7 +35,7 @@ async function addVideos(channelYt: string, axis: number, words: string[], n: nu
   const ids: string[] = [];
   for (let i = 0; i < n; i++) {
     const v = await db.video.create({ data: { youtubeId: `${prefix}${channelYt}${offset + i}`, channelId: ch.id, title: `${words[0]} tips ${offset + i}`, tags: words, publishedAt: new Date(2024, 0, 1 + i) } });
-    await setVector("Video", v.id, vec(axis, offset + i));
+    await setVector("Video", v.id, vec(axis, offset + i), { model: embeddingModelId() });
     ids.push(v.id);
   }
   return { channelId: ch.id, ids };
