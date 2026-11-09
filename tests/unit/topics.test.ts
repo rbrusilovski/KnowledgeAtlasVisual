@@ -62,3 +62,13 @@ describe("trigram similarity (pg_trgm semantics)", () => {
     expect(trigramSimilarity("abc", "abc")).toBe(1);
   });
 });
+
+describe("corpus boilerplate (max_df)", () => {
+  it("drops phrases that appear in more than 8% of a large corpus", () => {
+    const tf = new Map([["sourdough starter", 2], ["stay concrete", 3]]);
+    const df = (p: string) => (p === "stay concrete" ? 400 : 20);
+    expect(topPhrases(tf, df, 2000).map((s) => s.phrase)).toEqual(["sourdough starter"]);
+    // Small corpora keep everything.
+    expect(topPhrases(tf, df, 100).map((s) => s.phrase)).toContain("stay concrete");
+  });
+});

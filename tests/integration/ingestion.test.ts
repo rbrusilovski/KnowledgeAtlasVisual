@@ -19,6 +19,7 @@ afterAll(async () => {
 });
 beforeEach(async () => {
   delete process.env.FIXTURE_NOW;
+  await drain().catch(() => undefined);
   await resetDb();
   await flushRedis();
 });

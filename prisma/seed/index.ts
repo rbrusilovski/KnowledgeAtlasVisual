@@ -48,6 +48,9 @@ async function main() {
   const toEmbed = await seedTaxonomy();
   if (toEmbed.length) await embedEntities("niche", toEmbed);
   log(`taxonomy: ${await db.niche.count()} niches (${toEmbed.length} centroids embedded)`);
+  const { buildDirty } = await import("@/server/services/graph");
+  const nicheRows = await db.niche.findMany({ select: { slug: true, depth: true } });
+  await buildDirty(nicheRows.map((n) => `${n.depth === 0 ? "niche" : "subniche"}:${n.slug}`));
 
   const demoEmail = "demo@atlas.local";
   if (!(await db.user.findUnique({ where: { email: demoEmail } }))) {

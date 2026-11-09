@@ -31,9 +31,20 @@ async function updateDf(videoId: string, phrases: string[]) {
 }
 
 /** Resolve a normalized phrase to a canonical Topic id: exact slug/alias → trigram ≥ 0.8 → embedding ≥ 0.9 → create. */
+const RESOLVE_KEY = (label: string) => key("topics", "resolve", label);
+
 export async function canonicalize(label: string, cache = new Map<string, string>()): Promise<{ id: string; created: boolean }> {
-  const hit = cache.get(label);
-  if (hit) return { id: hit, created: false };
+  const hit = cache.get(label) ?? (await redis.get(RESOLVE_KEY(label)));
+  if (hit) {
+    cache.set(label, hit);
+    return { id: hit, created: false };
+  }
+  const r = await canonicalizeUncached(label, cache);
+  await redis.set(RESOLVE_KEY(label), r.id, "EX", 7 * 86400);
+  return r;
+}
+
+async function canonicalizeUncached(label: string, cache: Map<string, string>): Promise<{ id: string; created: boolean }> {
   const slug = slugify(label);
   const exact = await db.topic.findFirst({ where: { OR: [{ slug }, { aliases: { has: label } }] }, select: { id: true } });
   if (exact) {

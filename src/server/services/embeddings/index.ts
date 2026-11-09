@@ -32,7 +32,8 @@ async function embedCached(texts: string[]): Promise<number[][]> {
   const keys = texts.map((t) => key("emb", p.name, sha(t)));
   const cached = keys.length ? await redis.mgetBuffer(...keys) : [];
   const missingIdx: number[] = [];
-  const out: (number[] | null)[] = cached.map((b) => (b ? Array.from(new Float32Array(b.buffer, b.byteOffset, b.byteLength / 4)) : null));
+  // Copy into a fresh, 4-byte-aligned buffer: Redis Buffers can sit at any byteOffset in Node's pool.
+  const out: (number[] | null)[] = cached.map((b) => (b && b.byteLength % 4 === 0 ? Array.from(new Float32Array(Uint8Array.from(b).buffer)) : null));
   out.forEach((v, i) => !v && missingIdx.push(i));
   if (missingIdx.length) {
     const fresh = await p.embed(missingIdx.map((i) => texts[i]!));

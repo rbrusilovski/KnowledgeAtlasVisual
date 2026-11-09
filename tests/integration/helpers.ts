@@ -9,7 +9,16 @@ export const noopCtl: JobControl = { jobId: "test", progress: async () => {} };
 export async function resetDb() {
   const tables = await db.$queryRaw<{ tablename: string }[]>`
     SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`;
-  await db.$executeRawUnsafe(`TRUNCATE ${tables.map((t) => `"${t.tablename}"`).join(", ")} RESTART IDENTITY CASCADE`);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await db.$executeRawUnsafe(`TRUNCATE ${tables.map((t) => `"${t.tablename}"`).join(", ")} RESTART IDENTITY CASCADE`);
+      return;
+    } catch (e) {
+      // A straggling in-process job can hold row locks; back off and retry.
+      if (attempt >= 5 || !String(e).includes("deadlock")) throw e;
+      await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+    }
+  }
 }
 
 export async function flushRedis() {

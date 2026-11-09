@@ -27,7 +27,8 @@ export const auth = betterAuth({
       defaultLayout: { type: "string", input: false, defaultValue: "global", required: false },
     },
   },
-  session: { cookieCache: { enabled: true, maxAge: 60 } },
+  // No cookie cache: revoking a session or deleting an account must take effect immediately.
+  session: { cookieCache: { enabled: false } },
   rateLimit: { enabled: env.NODE_ENV === "production", window: 60, max: 30 },
   databaseHooks: {
     user: {

@@ -43,7 +43,8 @@ const nextConfig: NextConfig = {
     },
   },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    // bull-board (proxied under /api/admin/queues) sets its own CSP.
+    return [{ source: "/((?!api/admin/queues).*)", headers: securityHeaders }];
   },
 };
 

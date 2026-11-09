@@ -22,3 +22,11 @@ Format: decision — reason — alternative considered.
 - MiniLM cosine is rescaled (cos−0.12)/0.48 → 0..1 before the 0.55 weight — raw cosines for related text sit around 0.15–0.6 so unscaled scores never cleared the 0.35 threshold — per-channel max-normalization.
 - If a channel has any MANUAL niche, all automatic labels are removed on reclassification — 'manual always wins' — mixing manual + automatic labels.
 - Taxonomy lives in `src/server/taxonomy.ts` (seed + classification + fixture generator import it) — server code can't import from prisma/ via the @ alias — duplicating it.
+- Graph edge provenance: undirected top-k kinds store `evidence.from` (which endpoint picked the edge) so incremental rebuilds are exact unions of per-node top-k — recompute-all-neighbors or asymmetric approximations.
+- PUBLISHED edge weight = 0.5·log-popularity + 0.5·recency (not a constant 1) — lets per-hop top-k fan-out pick representative videos — constant ownership weight.
+- Spec thresholds kept as-is (SIMILAR cosine ≥ 0.75, CO_TOPIC weighted Jaccard ≥ 0.2); on the demo dataset this yields few channel↔channel semantic edges because most demo channels sit in distinct subniches — lowering thresholds to densify the demo.
+- Topic extraction drops corpus boilerplate with max_df = 8% (once ≥ 200 docs) and caches label→topic resolution in Redis — fixture sentence templates otherwise dominated cross-channel topics — a hand-curated stopword list only.
+- Better Auth session cookie cache disabled — revocation/account deletion must take effect immediately — 60 s cookie cache.
+- Local traversal fan-out per hop is 40 / 12 / 6 and does not expand through niche hubs or videos — keeps neighborhoods legible and bounded — uniform fan-out.
+- OpenAPI is generated from the shared Zod contracts with Zod 4's native `z.toJSONSchema` — no maintained Zod→OpenAPI library needed for Zod 4 — @asteasolutions/zod-to-openapi.
+- Account deletion also removes the user's uploaded transcripts and discovery history — they are personal contributions — keeping them anonymized.

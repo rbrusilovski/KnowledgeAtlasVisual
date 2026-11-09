@@ -6,7 +6,7 @@ export const STOPWORDS = new Set(
 
 /** Generic YouTube/title boilerplate that never makes a good topic. */
 export const BOILERPLATE = new Set(
-  `video videos channel subscribe subscribed like comment comments share watch watching today episode ep part full new latest official live stream streaming link links description below chapter chapters intro outro wrap up wrap-up thanks thank viewer viewers question questions answered answer q a qa minute minutes second seconds hour hours day days week weeks month months year years time first last next one two three four five six seven eight nine ten trick tricks tip tips changed change everything everyone nobody tells tell harder hard think actually work works working complete walkthrough beginner beginners beginner's guide mistake mistakes make makes tried try trying happened happen history surprising testing test tests myth myths deep dive setup honest look slow worth still finally connected building build scratch zero explained explain explaining pick better best worst quick fix need needs know want go going come coming see seen show shows shorts short vlog update updates review reviews reaction react series season shown said says say will got gonna wanna let lets start started starting end ending real really big small good great bad simple simply easy hard way ways part case thing stuff remember only stick most point put together compare difference example examples note notice step steps interesting genuinely directly specifically comments`.split(/\s+/),
+  `video videos channel subscribe subscribed like comment comments share watch watching today episode ep part full new latest official live stream streaming link links description below chapter chapters intro outro wrap up wrap-up thanks thank viewer viewers question questions answered answer q a qa minute minutes second seconds hour hours day days week weeks month months year years time first last next one two three four five six seven eight nine ten trick tricks tip tips changed change everything everyone nobody tells tell harder hard think actually work works working complete walkthrough beginner beginners beginner's guide mistake mistakes make makes tried try trying happened happen history surprising testing test tests myth myths deep dive setup honest look slow worth still finally connected building build scratch zero explained explain explaining pick better best worst quick fix need needs know want go going come coming see seen show shows shorts short vlog update updates review reviews reaction react series season shown said says say will got gonna wanna let lets start started starting end ending real really big small good great bad simple simply easy hard way ways part case thing stuff remember only stick most point put together compare difference example examples note notice step steps interesting genuinely directly specifically comments watched adjust immediately different properly key idea concrete surprised result results patience reward fundamental fundamentals people give back viewer asked`.split(/\s+/),
 );
 
 const KEEP_S = new Set(["series", "species", "news", "physics", "mathematics", "economics", "analytics", "gymnastics", "kubernetes", "devops", "aws", "ios", "windows", "data", "always", "chaos", "bias", "lens", "gas", "dynamics", "electronics", "robotics", "logistics", "genetics", "statistics", "ethics", "esports", "jeans", "glasses", "basics", "graphics", "mechanics", "politics", "linux", "atlas", "plus", "status", "virus", "focus", "campus", "corpus", "nexus", "thesis", "analysis", "basis", "crisis", "axis"]);
@@ -81,10 +81,16 @@ export interface Scored {
   score: number;
 }
 
-/** TF-IDF with n-gram length bonus; prunes unigrams subsumed by a strong containing phrase. */
+/** Phrases in more than this share of documents are corpus boilerplate (sklearn-style max_df). */
+export const MAX_DF_RATIO = 0.08;
+/** max_df only applies once the corpus is big enough for document frequencies to mean something. */
+export const MAX_DF_MIN_DOCS = 200;
+
+/** TF-IDF with n-gram length bonus; drops corpus-boilerplate phrases; prunes unigrams subsumed by a strong containing phrase. */
 export function topPhrases(tf: Map<string, number>, df: (p: string) => number, nDocs: number, k = 8): Scored[] {
   const scored: Scored[] = [];
   for (const [phrase, f] of tf) {
+    if (nDocs >= MAX_DF_MIN_DOCS && df(phrase) / nDocs > MAX_DF_RATIO) continue;
     const n = phrase.split(" ").length;
     const idf = Math.log((nDocs + 1) / (df(phrase) + 1)) + 1;
     const bonus = n === 1 ? 1 : n === 2 ? 1.35 : 1.5;
